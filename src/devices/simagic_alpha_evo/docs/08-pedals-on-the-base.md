@@ -45,7 +45,7 @@ is enough is not known.
 | `f1 1d` | none | right after | **end calibration** |
 | `f1 20` | the same 16 bytes | again, after `1d` | |
 | `f1 21` | 40 bytes | right after | settings; not decoded |
-| `f1 1f` | none | right after | not known |
+| `f1 1f` | none | right after | **brake on its load cell**; `f1 1e` is the angle sensor |
 | `f1 16` | 12 zero bytes | right after | not known |
 | `f1 1b` | 12 bytes | right after | settings; the same bytes as the `f6` reply's |
 | `f1 17` | 5 zero bytes | right after | not known |
@@ -94,9 +94,49 @@ Ten 16-bit little-endian numbers in four groups of five:
 (6, 205, 270, 335, 302)
 ```
 
-One group per sensor, in the order of `f1 20`'s pairs, would fit. What the
-numbers mean is not known: a capture of SimPro changing one pedal setting at a
-time would tell.
+One group per sensor, in the order of `f1 20`'s pairs, would fit.
+
+**Group 1 is the brake's**, from `pedal-settings.pcapng`, in which SimPro's
+brake settings were changed one at a time and changed back. Nothing else in
+`f1 21` moved. Its five numbers:
+
+| Index | Linear, full range | What moves it |
+| --- | --- | --- |
+| 0 | 6 | the range's start: 6 at 0 %; 8, 41, 38 as the slider was dragged towards 10 % |
+| 1 | 340 | the curve, at 25 % in |
+| 2 | 270 | the curve, at 50 % in |
+| 3 | 200 | the curve, at 75 % in |
+| 4 | 302 | the range's end: 302 at 100 %; 284, then 266 dragged towards 90 % |
+
+SimPro's four curves, as indices 1–3:
+
+| Curve | Sent | As output, if 410 is 0 % and 130 is 100 % |
+| --- | --- | --- |
+| Linear | 340, 270, 200 | 25, 50, 75 % |
+| Second | 382, 326, 242 | 10, 30, 60 % |
+| Third | 298, 214, 158 | 40, 70, 90 % |
+| Fourth | 382, 270, 158 | 10, 50, 90 % |
+
+The output column is a reading that fits all four, not something seen: the
+numbers look like positions in SimPro's own curve editor, y down, rather than
+percentages. The range ends' scale, 6 to 302, is the same sort of thing; where
+exactly 10 % and 90 % fall on it is not pinned, since the slider was dragged.
+
+What the other groups are is not known. Changing the display unit, % or kg,
+sent nothing new: it is SimPro's alone.
+
+### Every settings change is the same update
+
+Each change in SimPro sent, three times each: `f1 20` with the calibration as it
+stands, `f1 21` with every group, then **`f1 1f`** with the brake on its load
+cell or **`f1 1e`** on its angle sensor. The `f6` reply's last byte followed:
+`00` for the load cell, `01` for angle. That last report may be what applies the
+other two, as chunk 3 does for the wheel ([05](05-wheel-config.md#sending-rules)),
+so it should never be sent alone: the wheel's block taught that sending only the
+report that applies can wipe what it applies.
+
+The calibration cannot be read back that has been found, so a host that sends
+this update has to restate a calibration it keeps itself.
 
 ### `f1 1b`
 
