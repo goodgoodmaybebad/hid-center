@@ -9,7 +9,9 @@ Everything here is from two captures of SIMAGIC SimPro Manager and a two-pedal
 P1000 (throttle and brake) on an Alpha Evo: `pedal-calibration.pcapng`,
 calibrating it, and `pedal-settings.pcapng`, changing the brake's settings.
 
-**What the app sends** is only the settings update, for the brake: see
+**What the app sends** is only the settings update, for the brake and the
+throttle, starting from what the latest capture, `throttle-range.pcapng`, had:
+see
 [Every settings change is the same update](#every-settings-change-is-the-same-update),
 `AlphaEvoPedals.h` and `BasePedalController.h`. It never calibrates, never asks
 for the `f6` reply, and never sends `f1 18`; it sends nothing until the user has
@@ -131,8 +133,9 @@ exactly 10 % and 90 % fall on it is not pinned, since the slider was dragged.
 **Group 2 is the throttle's**, from `throttle-curves.pcapng`, in which SimPro's
 throttle curve was stepped through its presets and nothing else moved. Its curve
 points went through the same four values as the brake's, so the presets are the
-same for both. Its range end stayed at 257, which on the brake's scale is 85 %;
-whether the throttle's range uses the same scale is not confirmed. Before the
+same for both. Its range end stayed at 257, which on the brake's scale is 85 %.
+`throttle-range.pcapng` confirms the throttle uses the same scale: SimPro showed
+41 as about 12 %, 257 as 85 % and 299 as 99 %. Before the
 capture it was on a custom curve, `340, 270, 156`.
 
 Group 0 is linear over its whole range in every capture, as an unused clutch

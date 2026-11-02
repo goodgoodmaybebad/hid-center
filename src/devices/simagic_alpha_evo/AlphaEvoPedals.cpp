@@ -78,7 +78,7 @@ constexpr Report brakeSensorReport(const PedalSettings &settings)
                          nullptr, 0);
 }
 
-constexpr PedalSettings capturedSettings()
+constexpr PedalSettings settingsAsFirstCaptured()
 {
     PedalSettings settings;
     settings.calibration = {1544, 2407, 1461, 2011, 922, 2160, 1523, 2490};
@@ -136,17 +136,18 @@ constexpr PedalSettings withBrakeAngle(PedalSettings settings)
     return settings;
 }
 
-static_assert(calibrationReport(capturedSettings()) == kCaptureCalibration,
+static_assert(calibrationReport(settingsAsFirstCaptured()) == kCaptureCalibration,
               "the calibration report must match the capture");
-static_assert(settingsReport(capturedSettings()) == kCaptureSettings,
+static_assert(settingsReport(settingsAsFirstCaptured()) == kCaptureSettings,
               "the settings report must match the capture");
-static_assert(settingsReport(withBrakeCurve(capturedSettings(), 1)) == kCaptureSettingsCurve2,
+static_assert(settingsReport(withBrakeCurve(settingsAsFirstCaptured(), 1))
+                  == kCaptureSettingsCurve2,
               "the brake on the second curve must match the capture: group 1 is the brake's");
-static_assert(settingsReport(withBrakeCurve(capturedSettings(), 0)) == kCaptureSettings,
+static_assert(settingsReport(withBrakeCurve(settingsAsFirstCaptured(), 0)) == kCaptureSettings,
               "the captured brake is on the linear curve");
-static_assert(brakeSensorReport(capturedSettings()) == kCaptureBrakeLoadCell,
+static_assert(brakeSensorReport(settingsAsFirstCaptured()) == kCaptureBrakeLoadCell,
               "the brake on its load cell must match the capture");
-static_assert(brakeSensorReport(withBrakeAngle(capturedSettings())) == kCaptureBrakeAngle,
+static_assert(brakeSensorReport(withBrakeAngle(settingsAsFirstCaptured())) == kCaptureBrakeAngle,
               "the brake on its angle sensor must match the capture");
 
 constexpr int rangeValue(int percent)
@@ -163,25 +164,17 @@ constexpr int rangePercent(int value)
     return ((clamped - kRangeZero) * 100 + kRangeSpan / 2) / kRangeSpan;
 }
 
-// The ends of the scale as captured, and what SimPro showed for two values it
-// sent while a slider was dragged.
+// The ends of the scale as captured, and what SimPro showed for values it sent:
+// the brake's two while its sliders were dragged, then the throttle's, from
+// `throttle-range.pcapng`, the same scale.
 static_assert(rangeValue(0) == 6 && rangeValue(100) == 302, "the range runs from 6 to 302");
 static_assert(rangePercent(41) == 12 && rangePercent(266) == 88,
               "41 is what SimPro showed as 12 %, and 266 as 88 %");
+static_assert(rangePercent(257) == 85 && rangePercent(299) == 99,
+              "the throttle's 257 is what SimPro showed as 85 %, and 299 as 99 %");
 
-QByteArray toByteArray(const Report &report)
-{
-    return QByteArray(reinterpret_cast<const char *>(report.data()), int(report.size()));
-}
-
-} // namespace
-
-PedalSettings capturedPedalSettings()
-{
-    return capturedSettings();
-}
-
-int pedalCurveOf(const PedalGroup &group)
+/// Which of kPedalCurves a group has, or -1 for none of them.
+constexpr int curveIndexOf(const PedalGroup &group)
 {
     for (int curve = 0; curve < kPedalCurveCount; ++curve) {
         bool same = true;
@@ -195,6 +188,63 @@ int pedalCurveOf(const PedalGroup &group)
             return curve;
     }
     return -1;
+}
+
+static_assert(curveIndexOf({6, 340, 270, 156, 257}) == -1,
+              "the throttle's custom curve from the first captures is none of SimPro's four");
+
+/// The pedals as `throttle-range.pcapng` left them, the latest capture: the
+/// brake starting at 13 %, the throttle linear from 0 % to 85 %. What an
+/// update carries until the user changes something here.
+constexpr PedalSettings latestSettings()
+{
+    PedalSettings settings = settingsAsFirstCaptured();
+    settings.groups = {{
+        {6, 340, 270, 200, 302},
+        {44, 340, 270, 200, 302},
+        {6, 340, 270, 200, 257},
+        {6, 205, 270, 335, 302},
+    }};
+    return settings;
+}
+
+/// Frame 29772 of `throttle-range.pcapng`: SimPro's last update in it.
+constexpr Report kCaptureLatestSettings{
+    0x80, 0x1d, 0x0a, 0x01, 0x2a, 0xf1, 0x21, 0x06, 0x00, 0x54, 0x01, 0x0e,
+    0x01, 0xc8, 0x00, 0x2e, 0x01, 0x2c, 0x00, 0x54, 0x01, 0x0e, 0x01, 0xc8,
+    0x00, 0x2e, 0x01, 0x06, 0x00, 0x54, 0x01, 0x0e, 0x01, 0xc8, 0x00, 0x01,
+    0x01, 0x06, 0x00, 0xcd, 0x00, 0x0e, 0x01, 0x4f, 0x01, 0x2e, 0x01};
+
+static_assert(settingsReport(latestSettings()) == kCaptureLatestSettings,
+              "the latest settings must match the capture");
+static_assert(calibrationReport(latestSettings()) == kCaptureCalibration,
+              "the calibration has not changed since it was captured");
+constexpr PedalGroup latestGroup(int group)
+{
+    return latestSettings().groups[std::size_t(group)];
+}
+
+static_assert(rangePercent(latestGroup(kPedalBrakeGroup)[kPedalRangeStartIndex]) == 13,
+              "the brake starts at 13 % in the latest capture");
+static_assert(curveIndexOf(latestGroup(kPedalThrottleGroup)) == 0
+                  && rangePercent(latestGroup(kPedalThrottleGroup)[kPedalRangeEndIndex]) == 85,
+              "the throttle is linear, to 85 %, in the latest capture");
+
+QByteArray toByteArray(const Report &report)
+{
+    return QByteArray(reinterpret_cast<const char *>(report.data()), int(report.size()));
+}
+
+} // namespace
+
+PedalSettings capturedPedalSettings()
+{
+    return latestSettings();
+}
+
+int pedalCurveOf(const PedalGroup &group)
+{
+    return curveIndexOf(group);
 }
 
 int pedalRangeValue(int percent)

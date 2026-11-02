@@ -69,6 +69,9 @@ BasePedalController::BasePedalController(AlphaEvoSettings *settings, UsbDeviceIn
     PedalGroup brake{};
     if (groupFromString(store.value(settingsPath(m_info, "brakeGroup")).toString(), &brake))
         m_pedals.groups[std::size_t(kPedalBrakeGroup)] = brake;
+    PedalGroup throttle{};
+    if (groupFromString(store.value(settingsPath(m_info, "throttleGroup")).toString(), &throttle))
+        m_pedals.groups[std::size_t(kPedalThrottleGroup)] = throttle;
     if (store.value(settingsPath(m_info, "brakeSensor")).toString() == QLatin1String("angle"))
         m_pedals.brakeSensor = PedalBrakeSensor::Angle;
 
@@ -98,44 +101,43 @@ void BasePedalController::setBrakeSensor(PedalBrakeSensor sensor)
     change(next);
 }
 
-int BasePedalController::brakeCurve() const
+int BasePedalController::curveOf(int group) const
 {
-    return pedalCurveOf(m_pedals.groups[std::size_t(kPedalBrakeGroup)]);
+    return pedalCurveOf(m_pedals.groups[std::size_t(group)]);
 }
 
-void BasePedalController::setBrakeCurve(int curve)
+void BasePedalController::setCurve(int group, int curve)
 {
     if (curve < 0 || curve >= kPedalCurveCount)
         return;
     PedalSettings next = m_pedals;
-    PedalGroup &brake = next.groups[std::size_t(kPedalBrakeGroup)];
+    PedalGroup &pedal = next.groups[std::size_t(group)];
     for (int i = 0; i < kPedalCurvePointCount; ++i) {
-        brake[std::size_t(kPedalCurveFirstIndex + i)] =
+        pedal[std::size_t(kPedalCurveFirstIndex + i)] =
             kPedalCurves[std::size_t(curve)][std::size_t(i)];
     }
     change(next);
 }
 
-int BasePedalController::brakeRangeStart() const
+int BasePedalController::rangeStartOf(int group) const
 {
     return pedalRangePercent(
-        m_pedals.groups[std::size_t(kPedalBrakeGroup)][std::size_t(kPedalRangeStartIndex)]);
+        m_pedals.groups[std::size_t(group)][std::size_t(kPedalRangeStartIndex)]);
 }
 
-int BasePedalController::brakeRangeEnd() const
+int BasePedalController::rangeEndOf(int group) const
 {
-    return pedalRangePercent(
-        m_pedals.groups[std::size_t(kPedalBrakeGroup)][std::size_t(kPedalRangeEndIndex)]);
+    return pedalRangePercent(m_pedals.groups[std::size_t(group)][std::size_t(kPedalRangeEndIndex)]);
 }
 
-void BasePedalController::setBrakeRange(int startPercent, int endPercent)
+void BasePedalController::setRange(int group, int startPercent, int endPercent)
 {
     const int start = qBound(0, startPercent, 99);
     const int end = qBound(start + 1, endPercent, 100);
     PedalSettings next = m_pedals;
-    PedalGroup &brake = next.groups[std::size_t(kPedalBrakeGroup)];
-    brake[std::size_t(kPedalRangeStartIndex)] = quint16(pedalRangeValue(start));
-    brake[std::size_t(kPedalRangeEndIndex)] = quint16(pedalRangeValue(end));
+    PedalGroup &pedal = next.groups[std::size_t(group)];
+    pedal[std::size_t(kPedalRangeStartIndex)] = quint16(pedalRangeValue(start));
+    pedal[std::size_t(kPedalRangeEndIndex)] = quint16(pedalRangeValue(end));
     change(next);
 }
 
@@ -206,6 +208,8 @@ void BasePedalController::save() const
     QSettings store;
     store.setValue(settingsPath(m_info, "brakeGroup"),
                    groupToString(m_pedals.groups[std::size_t(kPedalBrakeGroup)]));
+    store.setValue(settingsPath(m_info, "throttleGroup"),
+                   groupToString(m_pedals.groups[std::size_t(kPedalThrottleGroup)]));
     store.setValue(settingsPath(m_info, "brakeSensor"),
                    m_pedals.brakeSensor == PedalBrakeSensor::Angle ? QStringLiteral("angle")
                                                                    : QStringLiteral("loadCell"));

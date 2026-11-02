@@ -9,6 +9,7 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QFontDatabase>
 #include <QFormLayout>
 #include <QGridLayout>
@@ -31,6 +32,46 @@ constexpr int kBarSteps = 1000;
 int barValue(qreal fraction)
 {
     return int(std::lround(qBound(0.0, fraction, 1.0) * kBarSteps));
+}
+
+/// SimPro's four curves, in its order: kPedalCurves. A curve that is none of
+/// them, drawn by hand in SimPro, shows as the placeholder.
+QComboBox *makeCurveChoice(const QString &objectName, QWidget *parent)
+{
+    auto *curve = new QComboBox(parent);
+    curve->setObjectName(objectName);
+    curve->addItem(QCoreApplication::translate("PedalsPage", "Linear"));
+    curve->addItem(QCoreApplication::translate("PedalsPage", "Soft start (10 / 30 / 60 %)"));
+    curve->addItem(QCoreApplication::translate("PedalsPage", "Strong start (40 / 70 / 90 %)"));
+    curve->addItem(QCoreApplication::translate("PedalsPage", "S-shaped (10 / 50 / 90 %)"));
+    curve->setPlaceholderText(
+        QCoreApplication::translate("PedalsPage", "Custom, as SimPro set it"));
+    curve->setToolTip(QCoreApplication::translate(
+        "PedalsPage", "SimPro's four curves, in its order. The figures are how much the pedal "
+                      "gives a quarter, half and three quarters of the way in."));
+    return curve;
+}
+
+/// One end of a pedal's range, in percent.
+QSpinBox *makeRangeEnd(const QString &objectName, int minimum, int maximum, QWidget *parent)
+{
+    auto *box = new QSpinBox(parent);
+    box->setObjectName(objectName);
+    box->setRange(minimum, maximum);
+    box->setSuffix(QCoreApplication::translate("PedalsPage", " %"));
+    box->setKeyboardTracking(false);
+    return box;
+}
+
+/// A start and an end, side by side.
+QHBoxLayout *rangeRow(QSpinBox *start, QSpinBox *end, QWidget *parent)
+{
+    auto *row = new QHBoxLayout;
+    row->addWidget(start);
+    row->addWidget(new QLabel(QCoreApplication::translate("PedalsPage", "to"), parent));
+    row->addWidget(end);
+    row->addStretch(1);
+    return row;
 }
 
 } // namespace
@@ -79,7 +120,7 @@ PedalsPage::PedalsPage(AlphaEvoButtonInput *input, BasePedalController *pedals,
     m_status->setWordWrap(true);
     layout->addWidget(m_status);
 
-    layout->addWidget(makeBrakeBox());
+    layout->addWidget(makeSettingsBox());
     layout->addStretch(1);
 
     if (m_input) {
@@ -155,20 +196,21 @@ void PedalsPage::showStatus()
     m_status->setVisible(!why.isEmpty());
 }
 
-QGroupBox *PedalsPage::makeBrakeBox()
+QGroupBox *PedalsPage::makeSettingsBox()
 {
-    auto *box = new QGroupBox(tr("Brake settings"), this);
-    box->setObjectName(QStringLiteral("brakeSettings"));
+    auto *box = new QGroupBox(tr("Pedal settings"), this);
+    box->setObjectName(QStringLiteral("pedalSettings"));
     auto *layout = new QVBoxLayout(box);
 
-    m_brakeEnabled = new QCheckBox(tr("&Change the brake's settings from HID Center"), box);
-    m_brakeEnabled->setObjectName(QStringLiteral("brakeSettingsEnabled"));
-    layout->addWidget(m_brakeEnabled);
+    m_settingsEnabled = new QCheckBox(tr("&Change the pedals' settings from HID Center"), box);
+    m_settingsEnabled->setObjectName(QStringLiteral("pedalSettingsEnabled"));
+    layout->addWidget(m_settingsEnabled);
 
     auto *warning = new QLabel(
-        tr("Every change also sends the pedals' calibration, which cannot be read back from "
-           "them: the one SimPro saved when this was worked out. If you have calibrated the "
-           "pedals in SimPro since, leave this off, or the next change here undoes it.\n"
+        tr("Every change sends all of the pedals' settings, since they cannot be read back from "
+           "them: these below, and the calibration SimPro saved when this was worked out. If "
+           "you have calibrated the pedals or changed their settings in SimPro since, leave "
+           "this off, or the next change here undoes it.\n"
            "Nothing is sent until you change something below."),
         box);
     warning->setWordWrap(true);
@@ -178,48 +220,41 @@ QGroupBox *PedalsPage::makeBrakeBox()
     auto *form = new QFormLayout;
     layout->addLayout(form);
 
+    auto *brakeHeading = new QLabel(tr("<b>Brake</b>"), box);
+    form->addRow(brakeHeading);
+
     m_brakeSensor = new QComboBox(box);
     m_brakeSensor->setObjectName(QStringLiteral("brakeSensor"));
     m_brakeSensor->addItem(tr("Load cell"), int(PedalBrakeSensor::LoadCell));
     m_brakeSensor->addItem(tr("Angle sensor"), int(PedalBrakeSensor::Angle));
     form->addRow(tr("&Sensor"), m_brakeSensor);
 
-    m_brakeCurve = new QComboBox(box);
-    m_brakeCurve->setObjectName(QStringLiteral("brakeCurve"));
-    m_brakeCurve->addItem(tr("Linear"));
-    m_brakeCurve->addItem(tr("Soft start (10 / 30 / 60 %)"));
-    m_brakeCurve->addItem(tr("Strong start (40 / 70 / 90 %)"));
-    m_brakeCurve->addItem(tr("S-shaped (10 / 50 / 90 %)"));
-    m_brakeCurve->setToolTip(tr("SimPro's four curves, in its order. The figures are how much "
-                                "brake a quarter, half and three quarters of the way in give."));
+    m_brakeCurve = makeCurveChoice(QStringLiteral("brakeCurve"), box);
     form->addRow(tr("C&urve"), m_brakeCurve);
 
-    auto *range = new QHBoxLayout;
-    m_brakeRangeStart = new QSpinBox(box);
-    m_brakeRangeStart->setObjectName(QStringLiteral("brakeRangeStart"));
-    m_brakeRangeStart->setRange(0, 99);
-    m_brakeRangeStart->setSuffix(tr(" %"));
-    m_brakeRangeStart->setKeyboardTracking(false);
-    range->addWidget(m_brakeRangeStart);
-    range->addWidget(new QLabel(tr("to"), box));
-    m_brakeRangeEnd = new QSpinBox(box);
-    m_brakeRangeEnd->setObjectName(QStringLiteral("brakeRangeEnd"));
-    m_brakeRangeEnd->setRange(1, 100);
-    m_brakeRangeEnd->setSuffix(tr(" %"));
-    m_brakeRangeEnd->setKeyboardTracking(false);
-    range->addWidget(m_brakeRangeEnd);
-    range->addStretch(1);
-    form->addRow(tr("&Range"), range);
+    m_brakeRangeStart = makeRangeEnd(QStringLiteral("brakeRangeStart"), 0, 99, box);
+    m_brakeRangeEnd = makeRangeEnd(QStringLiteral("brakeRangeEnd"), 1, 100, box);
+    form->addRow(tr("&Range"), rangeRow(m_brakeRangeStart, m_brakeRangeEnd, box));
 
-    m_brakeStatus = new QLabel(box);
-    m_brakeStatus->setObjectName(QStringLiteral("brakeSettingsStatus"));
-    m_brakeStatus->setWordWrap(true);
-    layout->addWidget(m_brakeStatus);
+    auto *throttleHeading = new QLabel(tr("<b>Throttle</b>"), box);
+    form->addRow(throttleHeading);
+
+    m_throttleCurve = makeCurveChoice(QStringLiteral("throttleCurve"), box);
+    form->addRow(tr("Cur&ve"), m_throttleCurve);
+
+    m_throttleRangeStart = makeRangeEnd(QStringLiteral("throttleRangeStart"), 0, 99, box);
+    m_throttleRangeEnd = makeRangeEnd(QStringLiteral("throttleRangeEnd"), 1, 100, box);
+    form->addRow(tr("R&ange"), rangeRow(m_throttleRangeStart, m_throttleRangeEnd, box));
+
+    m_settingsStatus = new QLabel(box);
+    m_settingsStatus->setObjectName(QStringLiteral("brakeSettingsStatus"));
+    m_settingsStatus->setWordWrap(true);
+    layout->addWidget(m_settingsStatus);
 
     if (m_pedals) {
-        connect(m_brakeEnabled, &QCheckBox::toggled, this, [this](bool enabled) {
+        connect(m_settingsEnabled, &QCheckBox::toggled, this, [this](bool enabled) {
             m_pedals->setEnabled(enabled);
-            showBrakeSettings();
+            showSettings();
         });
         connect(m_brakeSensor, &QComboBox::currentIndexChanged, this, [this](int index) {
             if (index >= 0)
@@ -229,61 +264,83 @@ QGroupBox *PedalsPage::makeBrakeBox()
             if (index >= 0)
                 m_pedals->setBrakeCurve(index);
         });
-        const auto setRange = [this] {
+        const auto setBrakeRange = [this] {
             m_pedals->setBrakeRange(m_brakeRangeStart->value(), m_brakeRangeEnd->value());
-            showBrakeSettings();
+            showSettings();
         };
-        connect(m_brakeRangeStart, &QSpinBox::valueChanged, this, setRange);
-        connect(m_brakeRangeEnd, &QSpinBox::valueChanged, this, setRange);
+        connect(m_brakeRangeStart, &QSpinBox::valueChanged, this, setBrakeRange);
+        connect(m_brakeRangeEnd, &QSpinBox::valueChanged, this, setBrakeRange);
+
+        connect(m_throttleCurve, &QComboBox::currentIndexChanged, this, [this](int index) {
+            if (index >= 0)
+                m_pedals->setThrottleCurve(index);
+        });
+        const auto setThrottleRange = [this] {
+            m_pedals->setThrottleRange(m_throttleRangeStart->value(), m_throttleRangeEnd->value());
+            showSettings();
+        };
+        connect(m_throttleRangeStart, &QSpinBox::valueChanged, this, setThrottleRange);
+        connect(m_throttleRangeEnd, &QSpinBox::valueChanged, this, setThrottleRange);
 
         connect(m_pedals, &BasePedalController::sendingChanged, this, [this](bool sending) {
             if (sending)
-                m_brakeStatus->setText(tr("Sending to the pedals…"));
+                m_settingsStatus->setText(tr("Sending to the pedals…"));
         });
         connect(m_pedals, &BasePedalController::updateSent, this,
                 [this](bool ok, const QString &error, bool dryRun) {
-                    if (!ok)
-                        m_brakeStatus->setText(tr("Could not send to the pedals: %1").arg(error));
+                    if (!ok) {
+                        m_settingsStatus->setText(
+                            tr("Could not send to the pedals: %1").arg(error));
+                    }
                     else if (dryRun)
-                        m_brakeStatus->setText(tr("Dry run: logged, not sent."));
+                        m_settingsStatus->setText(tr("Dry run: logged, not sent."));
                     else
-                        m_brakeStatus->setText(tr("Sent to the pedals."));
+                        m_settingsStatus->setText(tr("Sent to the pedals."));
                 });
     }
-    showBrakeSettings();
+    showSettings();
     return box;
 }
 
-void PedalsPage::showBrakeSettings()
+void PedalsPage::showSettings()
 {
     const bool known = !m_pedals.isNull();
     const bool enabled = known && m_pedals->isEnabled();
 
     {
-        const QSignalBlocker enabledBlocker(m_brakeEnabled);
+        const QSignalBlocker enabledBlocker(m_settingsEnabled);
         const QSignalBlocker sensorBlocker(m_brakeSensor);
         const QSignalBlocker curveBlocker(m_brakeCurve);
         const QSignalBlocker startBlocker(m_brakeRangeStart);
         const QSignalBlocker endBlocker(m_brakeRangeEnd);
-        m_brakeEnabled->setChecked(enabled);
+        const QSignalBlocker throttleCurveBlocker(m_throttleCurve);
+        const QSignalBlocker throttleStartBlocker(m_throttleRangeStart);
+        const QSignalBlocker throttleEndBlocker(m_throttleRangeEnd);
+        m_settingsEnabled->setChecked(enabled);
         if (known) {
             m_brakeSensor->setCurrentIndex(
                 m_brakeSensor->findData(int(m_pedals->brakeSensor())));
             m_brakeCurve->setCurrentIndex(m_pedals->brakeCurve());
             m_brakeRangeStart->setValue(m_pedals->brakeRangeStart());
             m_brakeRangeEnd->setValue(m_pedals->brakeRangeEnd());
+            m_throttleCurve->setCurrentIndex(m_pedals->throttleCurve());
+            m_throttleRangeStart->setValue(m_pedals->throttleRangeStart());
+            m_throttleRangeEnd->setValue(m_pedals->throttleRangeEnd());
         }
     }
 
-    m_brakeEnabled->setEnabled(known);
+    m_settingsEnabled->setEnabled(known);
     for (QWidget *control : {static_cast<QWidget *>(m_brakeSensor),
                              static_cast<QWidget *>(m_brakeCurve),
                              static_cast<QWidget *>(m_brakeRangeStart),
-                             static_cast<QWidget *>(m_brakeRangeEnd)}) {
+                             static_cast<QWidget *>(m_brakeRangeEnd),
+                             static_cast<QWidget *>(m_throttleCurve),
+                             static_cast<QWidget *>(m_throttleRangeStart),
+                             static_cast<QWidget *>(m_throttleRangeEnd)}) {
         control->setEnabled(enabled);
     }
     if (!enabled)
-        m_brakeStatus->clear();
+        m_settingsStatus->clear();
 }
 
 } // namespace hidcenter::simagic_alpha_evo

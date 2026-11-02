@@ -23,8 +23,10 @@ inline constexpr int kPedalCalibrationCount = 8;
 inline constexpr int kPedalGroupCount = 4;
 inline constexpr int kPedalGroupSize = 5;
 
-/// The group SimPro changed for every brake setting.
+/// The group SimPro changed for every brake setting, and the one for every
+/// throttle setting.
 inline constexpr int kPedalBrakeGroup = 1;
+inline constexpr int kPedalThrottleGroup = 2;
 
 /// Where in a group the range's ends and the curve are.
 inline constexpr int kPedalRangeStartIndex = 0;
@@ -50,9 +52,9 @@ struct PedalSettings
     constexpr bool operator==(const PedalSettings &) const = default;
 };
 
-/// What SimPro sent in both captures before anything was changed: the
-/// calibration it had just made, every group, and the brake on its load cell
-/// with a linear curve over its whole range.
+/// What SimPro sent last, in the latest capture: the calibration it made, every
+/// group, the brake on its load cell from 13 % with a linear curve, and the
+/// throttle linear to 85 %.
 ///
 /// **One user's pedals.** The calibration cannot be read back, so whatever is
 /// sent with an update is restated from here, or from what the user set since.

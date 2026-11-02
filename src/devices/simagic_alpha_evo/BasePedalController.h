@@ -17,9 +17,9 @@ namespace hidcenter::simagic_alpha_evo {
 
 class AlphaEvoSettings;
 
-/// The brake settings of pedals plugged into the base by CAN-Bus, as this app
-/// sets them: which sensor it reads, its curve, and the part of its travel it
-/// uses.
+/// The settings of pedals plugged into the base by CAN-Bus, as this app sets
+/// them: which sensor the brake reads, and for the brake and the throttle,
+/// their curve and the part of their travel they use.
 ///
 /// GUI thread. Holds the whole of an update, keeps what the user chose between
 /// runs, and hands each update to AlphaEvoSettings a report at a time.
@@ -44,8 +44,8 @@ public:
     BasePedalController(AlphaEvoSettings *settings, UsbDeviceInfo info,
                         QObject *parent = nullptr);
 
-    /// Whether brake changes are sent to the pedals. Kept between runs. Turning
-    /// it on sends nothing by itself.
+    /// Whether changes are sent to the pedals. Kept between runs. Turning it on
+    /// sends nothing by itself.
     bool isEnabled() const { return m_enabled; }
     void setEnabled(bool enabled);
 
@@ -53,14 +53,29 @@ public:
     void setBrakeSensor(PedalBrakeSensor sensor);
 
     /// Which of kPedalCurves the brake is on, or -1 for none of them.
-    int brakeCurve() const;
-    void setBrakeCurve(int curve);
+    int brakeCurve() const { return curveOf(kPedalBrakeGroup); }
+    void setBrakeCurve(int curve) { setCurve(kPedalBrakeGroup, curve); }
 
     /// The part of the brake's travel it uses, in percent. The start is held
     /// below the end.
-    int brakeRangeStart() const;
-    int brakeRangeEnd() const;
-    void setBrakeRange(int startPercent, int endPercent);
+    int brakeRangeStart() const { return rangeStartOf(kPedalBrakeGroup); }
+    int brakeRangeEnd() const { return rangeEndOf(kPedalBrakeGroup); }
+    void setBrakeRange(int startPercent, int endPercent)
+    {
+        setRange(kPedalBrakeGroup, startPercent, endPercent);
+    }
+
+    /// The same for the throttle. -1 for a curve that is none of SimPro's four,
+    /// such as one drawn by hand in SimPro, which is kept until a preset is
+    /// picked.
+    int throttleCurve() const { return curveOf(kPedalThrottleGroup); }
+    void setThrottleCurve(int curve) { setCurve(kPedalThrottleGroup, curve); }
+    int throttleRangeStart() const { return rangeStartOf(kPedalThrottleGroup); }
+    int throttleRangeEnd() const { return rangeEndOf(kPedalThrottleGroup); }
+    void setThrottleRange(int startPercent, int endPercent)
+    {
+        setRange(kPedalThrottleGroup, startPercent, endPercent);
+    }
 
     /// Whether an update is going out now.
     bool isSending() const;
@@ -74,6 +89,12 @@ Q_SIGNALS:
     void updateSent(bool ok, const QString &error, bool dryRun);
 
 private:
+    int curveOf(int group) const;
+    void setCurve(int group, int curve);
+    int rangeStartOf(int group) const;
+    int rangeEndOf(int group) const;
+    void setRange(int group, int startPercent, int endPercent);
+
     /// Take `next` as the settings, keep it, and send it if that is on.
     void change(const PedalSettings &next);
 
