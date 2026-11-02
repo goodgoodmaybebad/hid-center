@@ -179,6 +179,11 @@ is not said back anywhere that has been found.
 Both go wherever the brightness does: they are in chunk 3, which ends every
 update.
 
+**The paddles' calibration is not in this block.** A GT Neo whose paddles were
+calibrated in SIMAGIC's software kept that calibration when the app then sent it
+the whole block, and both paddles still reached full range. How the
+calibration is sent is not known.
+
 ## Sending rules
 
 These come from observed behaviour on a GTC and are what makes the protocol
