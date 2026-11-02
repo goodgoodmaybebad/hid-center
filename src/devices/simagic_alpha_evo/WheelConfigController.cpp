@@ -53,6 +53,14 @@ QString clutchRatioSettingsPath(const UsbDeviceInfo &info)
     return QStringLiteral("devices/%1/wheelClutchRatio").arg(ledSettingsKey(info));
 }
 
+/// One per wheel id, true while that wheel is left to SIMAGIC's software.
+QString managedElsewhereSettingsPath(const UsbDeviceInfo &info, int wheelId)
+{
+    return QStringLiteral("devices/%1/wheelManagedElsewhere/%2")
+        .arg(ledSettingsKey(info))
+        .arg(wheelId);
+}
+
 /// One group per wheel, by its wheel id, holding a colour name per control key.
 QString colourSettingsGroup(const UsbDeviceInfo &info, int wheelId)
 {
@@ -172,6 +180,9 @@ WheelConfigController::WheelConfigController(AlphaEvoSettings *settings, UsbDevi
         m_config.setClutchRatio(ratio);
 
     for (const WheelLayout &layout : wheelLayouts()) {
+        if (store.value(managedElsewhereSettingsPath(m_info, layout.wheelId)).toBool())
+            m_managedElsewhere.insert(layout.wheelId);
+
         store.beginGroup(colourSettingsGroup(m_info, layout.wheelId));
         QHash<QString, QColor> &colours = m_colours[layout.wheelId];
         for (const QString &key : store.childKeys()) {
@@ -492,7 +503,39 @@ bool WheelConfigController::sendsWheelSettings() const
 {
     if (!m_settings)
         return false;
-    return m_settings->isOffline() || wheelMappingsKnown(m_attachedWheelId);
+    return m_settings->isOffline()
+           || (wheelMappingsKnown(m_attachedWheelId)
+               && !m_managedElsewhere.contains(m_attachedWheelId));
+}
+
+void WheelConfigController::setManagedElsewhere(int wheelId, bool managed)
+{
+    if (managed == m_managedElsewhere.contains(wheelId))
+        return;
+
+    if (managed)
+        m_managedElsewhere.insert(wheelId);
+    else
+        m_managedElsewhere.remove(wheelId);
+    QSettings().setValue(managedElsewhereSettingsPath(m_info, wheelId), managed);
+    Q_EMIT managedElsewhereChanged(wheelId);
+
+    if (wheelId != m_attachedWheelId)
+        return;
+    if (managed) {
+        // Whatever was waiting would only go out later, over what the other
+        // software sets now.
+        m_pendingChunks = 0;
+        return;
+    }
+    // Taken back: the whole block, as when the wheel appears. Never only the
+    // last report; see refreshAttachedWheel().
+    if (sendsWheelSettings()) {
+        for (int chunk = 0; chunk < kWheelConfigApplyChunk; ++chunk)
+            m_pendingChunks |= quint8(1u << chunk);
+        if (!m_throttle->isActive())
+            flushPending();
+    }
 }
 
 const WheelControl *WheelConfigController::blockControl(WheelModel model, const QString &key) const

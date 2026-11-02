@@ -7,6 +7,7 @@
 #include <QHash>
 #include <QList>
 #include <QObject>
+#include <QSet>
 #include <QString>
 
 #include <array>
@@ -42,7 +43,9 @@ enum class WheelModel;
 /// brightness and the clutch bytes, makes the wheel apply the other three as it
 /// holds them, and sent alone to a GT Neo it left every input on button 1. So
 /// the block, whole, goes only to a wheel whose button mappings are known:
-/// wheelMappingsKnown(), a GTC or a GT Neo.
+/// wheelMappingsKnown(), a GTC or a GT Neo. Nor does anything go to one the user
+/// has left to SIMAGIC's software (managedElsewhere()), which keeps what that
+/// software set on it, LEDs and all.
 ///
 /// **Each of those has its own button mappings**, kept apart and put into the
 /// block for the wheel on the base. Everything else in the block is the GTC's:
@@ -157,9 +160,19 @@ public:
     int attachedWheelId() const { return m_attachedWheelId; }
 
     /// Whether a change to the block reaches the wheel now: while the base
-    /// reports a wheel whose mappings are known, or offline, where it is logged
-    /// instead of sent.
+    /// reports a wheel whose mappings are known and that is not left to
+    /// SIMAGIC's software, or offline, where it is logged instead of sent.
     bool sendsWheelSettings() const;
+
+    /// Whether wheel `wheelId` is left to SIMAGIC's software: nothing at all is
+    /// sent to it, so what that software set, such as its LEDs, stays. Kept
+    /// between runs, per wheel id. Off unless the user turns it on.
+    bool managedElsewhere(int wheelId) const { return m_managedElsewhere.contains(wheelId); }
+
+    /// Turn it on or off, and keep it. Turned off with that wheel on the base,
+    /// the whole block is sent, as when the wheel first appears, which replaces
+    /// whatever the other software set.
+    void setManagedElsewhere(int wheelId, bool managed);
 
 public Q_SLOTS:
     /// Look at which wheel the base reports, and when that has changed, say so,
@@ -171,6 +184,9 @@ public Q_SLOTS:
 Q_SIGNALS:
     /// The base reports another wheel than it did, or none.
     void attachedWheelChanged();
+
+    /// A wheel was left to SIMAGIC's software, or taken back.
+    void managedElsewhereChanged(int wheelId);
 
 private Q_SLOTS:
     void flushPending();
@@ -229,6 +245,9 @@ private:
 
     int m_attachedWheelId = 0;
     bool m_attachedWheelKnown = false;
+
+    /// The wheel ids left to SIMAGIC's software. See managedElsewhere().
+    QSet<int> m_managedElsewhere;
 
     /// Runs for a second after each update. A change while it runs is left
     /// to flushPending(), which sends the reports it touched as they are by then,

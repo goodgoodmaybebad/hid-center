@@ -11,6 +11,7 @@
 
 #include "WheelRpmLights.h"
 
+class QCheckBox;
 class QComboBox;
 class QGroupBox;
 class QLabel;
@@ -80,6 +81,11 @@ private Q_SLOTS:
     /// reported.
     void showClutch();
 
+    /// Offer leaving the wheel shown to SIMAGIC's software when it is the one
+    /// on the base, and switch off everything that would be sent to it while
+    /// it is.
+    void showManagedElsewhere();
+
 private:
     /// The wheel to draw: the one picked by hand, else the one the base reports
     /// when it is one the user is offered. Null when there is none to draw.
@@ -120,6 +126,10 @@ private:
     WheelConfigController *m_wheel = nullptr;
     AlphaEvoSettings *m_settings = nullptr;
 
+    /// Whether the wheel shown is the one on the base and is left to SIMAGIC's
+    /// software, so nothing on the page may change it.
+    bool m_wheelManaged = false;
+
     /// The device owns it, and may be gone before the page is.
     QPointer<AlphaEvoButtonInput> m_buttons;
 
@@ -131,6 +141,9 @@ private:
     QLabel *m_unknownWheelDetail = nullptr;
     WheelSchematic *m_schematic = nullptr;
     QLabel *m_problem = nullptr;
+    QGroupBox *m_managedBox = nullptr;
+    QCheckBox *m_managed = nullptr;
+    QGroupBox *m_leds = nullptr;
     QGroupBox *m_clutch = nullptr;
     QPushButton *m_clutchSync = nullptr;
     QSpinBox *m_clutchRatio = nullptr;

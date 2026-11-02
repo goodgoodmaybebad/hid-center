@@ -34,7 +34,9 @@ The plugin adds six tabs to the device page.
   - LED brightness
   - whether the clutch paddles are synced, and their ratio
 
-  It also shows pressed buttons and the clutch paddles live.
+  It also shows pressed buttons and the clutch paddles live. **Let SimPro manage
+  this wheel** stops the app sending anything to the wheel on the base, so what
+  SIMAGIC's own software set on it, LEDs included, stays.
 - **Pedals**: shows pedals plugged into the base by CAN-Bus, such as a P1000 in
   its blue-light mode, as live throttle and brake bars. Read only: their settings
   cannot be changed yet.
@@ -53,8 +55,9 @@ you explore the pages with no hardware connected.
 ## Limitations
 
 - Only the GTC and GT Neo are written to, and nothing at all is sent to any other
-  wheel. On a GT Neo only the button mappings are its own: its LEDs, shift
-  lights and clutch settings get the GTC's.
+  wheel. On a GT Neo only the button mappings, brightness and clutch settings
+  are its own: its LEDs and shift lights get the GTC's, unless the wheel is
+  left to SimPro.
 - The wheel's configuration and the LED ring cannot be read back from the hardware.
   The plugin remembers what it sent and re-sends the ring colours every few seconds.
 - Parts of the protocol are inferred from captures. The

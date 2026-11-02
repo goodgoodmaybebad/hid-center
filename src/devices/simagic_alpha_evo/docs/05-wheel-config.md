@@ -215,6 +215,10 @@ reliable in practice:
    after being another wheel or none — send the whole block with that wheel's
    mappings and the saved brightness: chunks 0, 1, 2, then 3. Sending a GT Neo
    this block is what restored its buttons.
+6. **Unless the user leaves the wheel to SIMAGIC's software.** Every write
+   restates the whole of chunks 0–2, so the app cannot change one setting and
+   keep the rest of what that software set. With the wheel left to it, nothing
+   is sent at all; taking it back sends the whole block.
 
 ## Worked example
 
