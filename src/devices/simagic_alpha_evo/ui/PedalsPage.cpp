@@ -6,10 +6,10 @@
 #include "AlphaEvoButtonInput.h"
 #include "AlphaEvoPedals.h"
 #include "BasePedalController.h"
+#include "PedalCalibrationDialog.h"
 
 #include <QCheckBox>
 #include <QComboBox>
-#include <QCoreApplication>
 #include <QFontDatabase>
 #include <QFormLayout>
 #include <QGridLayout>
@@ -17,11 +17,13 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QProgressBar>
+#include <QPushButton>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QVBoxLayout>
 
 #include <cmath>
+#include <vector>
 
 namespace hidcenter::simagic_alpha_evo {
 namespace {
@@ -34,44 +36,15 @@ int barValue(qreal fraction)
     return int(std::lround(qBound(0.0, fraction, 1.0) * kBarSteps));
 }
 
-/// SimPro's four curves, in its order: kPedalCurves. A curve that is none of
-/// them, drawn by hand in SimPro, shows as the placeholder.
-QComboBox *makeCurveChoice(const QString &objectName, QWidget *parent)
-{
-    auto *curve = new QComboBox(parent);
-    curve->setObjectName(objectName);
-    curve->addItem(QCoreApplication::translate("PedalsPage", "Linear"));
-    curve->addItem(QCoreApplication::translate("PedalsPage", "Soft start (10 / 30 / 60 %)"));
-    curve->addItem(QCoreApplication::translate("PedalsPage", "Strong start (40 / 70 / 90 %)"));
-    curve->addItem(QCoreApplication::translate("PedalsPage", "S-shaped (10 / 50 / 90 %)"));
-    curve->setPlaceholderText(
-        QCoreApplication::translate("PedalsPage", "Custom, as SimPro set it"));
-    curve->setToolTip(QCoreApplication::translate(
-        "PedalsPage", "SimPro's four curves, in its order. The figures are how much the pedal "
-                      "gives a quarter, half and three quarters of the way in."));
-    return curve;
-}
-
-/// One end of a pedal's range, in percent.
-QSpinBox *makeRangeEnd(const QString &objectName, int minimum, int maximum, QWidget *parent)
+QSpinBox *makePercentBox(const QString &objectName, int minimum, int maximum, QWidget *parent)
 {
     auto *box = new QSpinBox(parent);
     box->setObjectName(objectName);
     box->setRange(minimum, maximum);
-    box->setSuffix(QCoreApplication::translate("PedalsPage", " %"));
+    box->setSuffix(QStringLiteral(" %"));
+    // Typing 35 would otherwise send 3 to the pedals on the way.
     box->setKeyboardTracking(false);
     return box;
-}
-
-/// A start and an end, side by side.
-QHBoxLayout *rangeRow(QSpinBox *start, QSpinBox *end, QWidget *parent)
-{
-    auto *row = new QHBoxLayout;
-    row->addWidget(start);
-    row->addWidget(new QLabel(QCoreApplication::translate("PedalsPage", "to"), parent));
-    row->addWidget(end);
-    row->addStretch(1);
-    return row;
 }
 
 } // namespace
@@ -100,10 +73,10 @@ PedalsPage::PedalsPage(AlphaEvoButtonInput *input, BasePedalController *pedals,
         (*raw)->setEnabled(false);
         grid->addWidget(*raw, row, 2);
     };
-    addRow(0, tr("Throttle"), &m_throttle, &m_throttleRaw);
-    addRow(1, tr("Brake"), &m_brake, &m_brakeRaw);
-    m_throttle->setObjectName(QStringLiteral("throttleBar"));
-    m_brake->setObjectName(QStringLiteral("brakeBar"));
+    addRow(0, tr("Throttle"), &m_throttleBar, &m_throttleRaw);
+    addRow(1, tr("Brake"), &m_brakeBar, &m_brakeRaw);
+    m_throttleBar->setObjectName(QStringLiteral("throttleBar"));
+    m_brakeBar->setObjectName(QStringLiteral("brakeBar"));
     layout->addWidget(box);
 
     auto *note = new QLabel(
@@ -156,8 +129,8 @@ void PedalsPage::hideEvent(QHideEvent *event)
 void PedalsPage::showPedals()
 {
     const bool known = m_input && m_input->hasPedalAxes();
-    m_throttle->setValue(known ? barValue(m_input->throttle()) : 0);
-    m_brake->setValue(known ? barValue(m_input->brake()) : 0);
+    m_throttleBar->setValue(known ? barValue(m_input->throttle()) : 0);
+    m_brakeBar->setValue(known ? barValue(m_input->brake()) : 0);
     m_throttleRaw->setText(known ? tr("%1 / %2").arg(m_input->throttleRaw(), 5)
                                        .arg(m_input->throttleRawMax())
                                  : QString());
@@ -196,6 +169,8 @@ void PedalsPage::showStatus()
     m_status->setVisible(!why.isEmpty());
 }
 
+// --- Settings ---------------------------------------------------------------------
+
 QGroupBox *PedalsPage::makeSettingsBox()
 {
     auto *box = new QGroupBox(tr("Pedal settings"), this);
@@ -208,9 +183,9 @@ QGroupBox *PedalsPage::makeSettingsBox()
 
     auto *warning = new QLabel(
         tr("Every change sends all of the pedals' settings, since they cannot be read back from "
-           "them: these below, and the calibration SimPro saved when this was worked out. If "
-           "you have calibrated the pedals or changed their settings in SimPro since, leave "
-           "this off, or the next change here undoes it.\n"
+           "them: these below, and the calibration. If you have calibrated the pedals or "
+           "changed their settings in SimPro since, leave this off, or the next change here "
+           "undoes it.\n"
            "Nothing is sent until you change something below."),
         box);
     warning->setWordWrap(true);
@@ -220,34 +195,29 @@ QGroupBox *PedalsPage::makeSettingsBox()
     auto *form = new QFormLayout;
     layout->addLayout(form);
 
-    auto *brakeHeading = new QLabel(tr("<b>Brake</b>"), box);
-    form->addRow(brakeHeading);
+    m_brake.group = kPedalBrakeGroup;
+    m_throttle.group = kPedalThrottleGroup;
 
+    form->addRow(new QLabel(tr("<b>Brake</b>"), box));
     m_brakeSensor = new QComboBox(box);
     m_brakeSensor->setObjectName(QStringLiteral("brakeSensor"));
     m_brakeSensor->addItem(tr("Load cell"), int(PedalBrakeSensor::LoadCell));
     m_brakeSensor->addItem(tr("Angle sensor"), int(PedalBrakeSensor::Angle));
     form->addRow(tr("&Sensor"), m_brakeSensor);
+    addPedalRows(m_brake, QStringLiteral("brake"), form, box);
 
-    m_brakeCurve = makeCurveChoice(QStringLiteral("brakeCurve"), box);
-    form->addRow(tr("C&urve"), m_brakeCurve);
+    form->addRow(new QLabel(tr("<b>Throttle</b>"), box));
+    addPedalRows(m_throttle, QStringLiteral("throttle"), form, box);
 
-    m_brakeRangeStart = makeRangeEnd(QStringLiteral("brakeRangeStart"), 0, 99, box);
-    m_brakeRangeEnd = makeRangeEnd(QStringLiteral("brakeRangeEnd"), 1, 100, box);
-    form->addRow(tr("&Range"), rangeRow(m_brakeRangeStart, m_brakeRangeEnd, box));
-
-    auto *throttleHeading = new QLabel(tr("<b>Throttle</b>"), box);
-    form->addRow(throttleHeading);
-
-    m_throttleCurve = makeCurveChoice(QStringLiteral("throttleCurve"), box);
-    form->addRow(tr("Cur&ve"), m_throttleCurve);
-
-    m_throttleRangeStart = makeRangeEnd(QStringLiteral("throttleRangeStart"), 0, 99, box);
-    m_throttleRangeEnd = makeRangeEnd(QStringLiteral("throttleRangeEnd"), 1, 100, box);
-    form->addRow(tr("R&ange"), rangeRow(m_throttleRangeStart, m_throttleRangeEnd, box));
+    auto *calibrateRow = new QHBoxLayout;
+    m_calibrate = new QPushButton(tr("Ca&librate pedals…"), box);
+    m_calibrate->setObjectName(QStringLiteral("calibratePedals"));
+    calibrateRow->addWidget(m_calibrate);
+    calibrateRow->addStretch(1);
+    layout->addLayout(calibrateRow);
 
     m_settingsStatus = new QLabel(box);
-    m_settingsStatus->setObjectName(QStringLiteral("brakeSettingsStatus"));
+    m_settingsStatus->setObjectName(QStringLiteral("pedalSettingsStatus"));
     m_settingsStatus->setWordWrap(true);
     layout->addWidget(m_settingsStatus);
 
@@ -260,87 +230,154 @@ QGroupBox *PedalsPage::makeSettingsBox()
             if (index >= 0)
                 m_pedals->setBrakeSensor(PedalBrakeSensor(m_brakeSensor->itemData(index).toInt()));
         });
-        connect(m_brakeCurve, &QComboBox::currentIndexChanged, this, [this](int index) {
-            if (index >= 0)
-                m_pedals->setBrakeCurve(index);
-        });
-        const auto setBrakeRange = [this] {
-            m_pedals->setBrakeRange(m_brakeRangeStart->value(), m_brakeRangeEnd->value());
-            showSettings();
-        };
-        connect(m_brakeRangeStart, &QSpinBox::valueChanged, this, setBrakeRange);
-        connect(m_brakeRangeEnd, &QSpinBox::valueChanged, this, setBrakeRange);
+        connectPedal(m_brake);
+        connectPedal(m_throttle);
+        connect(m_calibrate, &QPushButton::clicked, this, &PedalsPage::openCalibration);
 
-        connect(m_throttleCurve, &QComboBox::currentIndexChanged, this, [this](int index) {
-            if (index >= 0)
-                m_pedals->setThrottleCurve(index);
-        });
-        const auto setThrottleRange = [this] {
-            m_pedals->setThrottleRange(m_throttleRangeStart->value(), m_throttleRangeEnd->value());
-            showSettings();
-        };
-        connect(m_throttleRangeStart, &QSpinBox::valueChanged, this, setThrottleRange);
-        connect(m_throttleRangeEnd, &QSpinBox::valueChanged, this, setThrottleRange);
-
+        connect(m_pedals, &BasePedalController::settingsChanged, this, &PedalsPage::showSettings);
+        connect(m_pedals, &BasePedalController::calibrationChanged, this,
+                &PedalsPage::showSettings);
         connect(m_pedals, &BasePedalController::sendingChanged, this, [this](bool sending) {
             if (sending)
                 m_settingsStatus->setText(tr("Sending to the pedals…"));
+            showSettings();
         });
         connect(m_pedals, &BasePedalController::updateSent, this,
                 [this](bool ok, const QString &error, bool dryRun) {
                     if (!ok) {
                         m_settingsStatus->setText(
                             tr("Could not send to the pedals: %1").arg(error));
-                    }
-                    else if (dryRun)
+                    } else if (dryRun) {
                         m_settingsStatus->setText(tr("Dry run: logged, not sent."));
-                    else
+                    } else {
                         m_settingsStatus->setText(tr("Sent to the pedals."));
+                    }
                 });
     }
     showSettings();
     return box;
 }
 
+void PedalsPage::addPedalRows(PedalControls &controls, const QString &name, QFormLayout *form,
+                              QWidget *parent)
+{
+    controls.curve = new QComboBox(parent);
+    controls.curve->setObjectName(name + QStringLiteral("Curve"));
+    controls.curve->addItem(tr("Linear"));
+    controls.curve->addItem(tr("Soft start (10 / 30 / 60 %)"));
+    controls.curve->addItem(tr("Strong start (40 / 70 / 90 %)"));
+    controls.curve->addItem(tr("S-shaped (10 / 50 / 90 %)"));
+    controls.curve->setPlaceholderText(tr("Custom"));
+    controls.curve->setToolTip(tr("SimPro's four curves, in its order. Changing a point below "
+                                  "makes the curve a custom one."));
+    form->addRow(tr("Curve"), controls.curve);
+
+    // How much the pedal gives a quarter, half and three quarters of the way in.
+    auto *points = new QHBoxLayout;
+    static const char *const kAt[] = {"25", "50", "75"};
+    for (std::size_t i = 0; i < controls.points.size(); ++i) {
+        points->addWidget(new QLabel(tr("at %1 %:").arg(QLatin1String(kAt[i])), parent));
+        controls.points[i] =
+            makePercentBox(name + QStringLiteral("Point%1").arg(i + 1), 0, 100, parent);
+        points->addWidget(controls.points[i]);
+    }
+    points->addStretch(1);
+    form->addRow(tr("Output"), points);
+
+    auto *range = new QHBoxLayout;
+    controls.rangeStart = makePercentBox(name + QStringLiteral("RangeStart"), 0, 99, parent);
+    controls.rangeEnd = makePercentBox(name + QStringLiteral("RangeEnd"), 1, 100, parent);
+    range->addWidget(controls.rangeStart);
+    range->addWidget(new QLabel(tr("to"), parent));
+    range->addWidget(controls.rangeEnd);
+    range->addStretch(1);
+    form->addRow(tr("Range"), range);
+}
+
+void PedalsPage::connectPedal(const PedalControls &controls)
+{
+    const int group = controls.group;
+    connect(controls.curve, &QComboBox::currentIndexChanged, this, [this, group](int index) {
+        if (index >= 0)
+            m_pedals->setCurve(group, index);
+    });
+
+    const auto setPoints = [this, controls] {
+        std::array<int, kPedalCurvePointCount> percents{};
+        for (std::size_t i = 0; i < percents.size(); ++i)
+            percents[i] = controls.points[i]->value();
+        m_pedals->setCurvePoints(controls.group, percents);
+        showSettings();
+    };
+    for (QSpinBox *point : controls.points)
+        connect(point, &QSpinBox::valueChanged, this, setPoints);
+
+    const auto setRange = [this, controls] {
+        m_pedals->setRange(controls.group, controls.rangeStart->value(),
+                           controls.rangeEnd->value());
+        showSettings();
+    };
+    connect(controls.rangeStart, &QSpinBox::valueChanged, this, setRange);
+    connect(controls.rangeEnd, &QSpinBox::valueChanged, this, setRange);
+}
+
 void PedalsPage::showSettings()
 {
     const bool known = !m_pedals.isNull();
     const bool enabled = known && m_pedals->isEnabled();
+    const bool calibrating =
+        known && m_pedals->calibration() != BasePedalController::Calibration::Idle;
+
+    QList<QWidget *> controls{m_brakeSensor};
+    for (const PedalControls *pedal : {&m_brake, &m_throttle}) {
+        controls << pedal->curve << pedal->rangeStart << pedal->rangeEnd;
+        for (QSpinBox *point : pedal->points)
+            controls << point;
+    }
 
     {
-        const QSignalBlocker enabledBlocker(m_settingsEnabled);
-        const QSignalBlocker sensorBlocker(m_brakeSensor);
-        const QSignalBlocker curveBlocker(m_brakeCurve);
-        const QSignalBlocker startBlocker(m_brakeRangeStart);
-        const QSignalBlocker endBlocker(m_brakeRangeEnd);
-        const QSignalBlocker throttleCurveBlocker(m_throttleCurve);
-        const QSignalBlocker throttleStartBlocker(m_throttleRangeStart);
-        const QSignalBlocker throttleEndBlocker(m_throttleRangeEnd);
+        // Blockers cannot be copied, which std::vector does not need to.
+        std::vector<QSignalBlocker> blockers;
+        blockers.reserve(std::size_t(controls.size()) + 1);
+        blockers.emplace_back(m_settingsEnabled);
+        for (QWidget *control : controls)
+            blockers.emplace_back(control);
+
         m_settingsEnabled->setChecked(enabled);
         if (known) {
             m_brakeSensor->setCurrentIndex(
                 m_brakeSensor->findData(int(m_pedals->brakeSensor())));
-            m_brakeCurve->setCurrentIndex(m_pedals->brakeCurve());
-            m_brakeRangeStart->setValue(m_pedals->brakeRangeStart());
-            m_brakeRangeEnd->setValue(m_pedals->brakeRangeEnd());
-            m_throttleCurve->setCurrentIndex(m_pedals->throttleCurve());
-            m_throttleRangeStart->setValue(m_pedals->throttleRangeStart());
-            m_throttleRangeEnd->setValue(m_pedals->throttleRangeEnd());
+            for (const PedalControls *pedal : {&m_brake, &m_throttle}) {
+                pedal->curve->setCurrentIndex(m_pedals->curveOf(pedal->group));
+                const std::array<int, kPedalCurvePointCount> points =
+                    m_pedals->curvePointsOf(pedal->group);
+                for (std::size_t i = 0; i < points.size(); ++i)
+                    pedal->points[i]->setValue(points[i]);
+                pedal->rangeStart->setValue(m_pedals->rangeStartOf(pedal->group));
+                pedal->rangeEnd->setValue(m_pedals->rangeEndOf(pedal->group));
+            }
         }
     }
 
-    m_settingsEnabled->setEnabled(known);
-    for (QWidget *control : {static_cast<QWidget *>(m_brakeSensor),
-                             static_cast<QWidget *>(m_brakeCurve),
-                             static_cast<QWidget *>(m_brakeRangeStart),
-                             static_cast<QWidget *>(m_brakeRangeEnd),
-                             static_cast<QWidget *>(m_throttleCurve),
-                             static_cast<QWidget *>(m_throttleRangeStart),
-                             static_cast<QWidget *>(m_throttleRangeEnd)}) {
-        control->setEnabled(enabled);
-    }
+    m_settingsEnabled->setEnabled(known && !calibrating);
+    for (QWidget *control : controls)
+        control->setEnabled(enabled && !calibrating);
+    m_calibrate->setEnabled(known && m_pedals->canCalibrate());
     if (!enabled)
         m_settingsStatus->clear();
+}
+
+void PedalsPage::openCalibration()
+{
+    if (!m_pedals || !m_pedals->canCalibrate())
+        return;
+
+    auto *dialog = new PedalCalibrationDialog(m_pedals, this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    // open() rather than exec(): unplugging the base destroys this page, and the
+    // window with it, which exec() would then return into.
+    dialog->open();
+    m_pedals->startCalibration();
 }
 
 } // namespace hidcenter::simagic_alpha_evo

@@ -70,10 +70,12 @@ bool SimagicAlphaEvoDevice::initialize(QString *error)
     // Wheel tab hiding as the Pedals tab shows cannot switch it off.
     m_pedalInput = new AlphaEvoButtonInput(m_context, this);
 
-    // The brake settings of pedals on the base. Sends nothing until the user
-    // turns it on and changes something.
+    // The settings of pedals on the base. Sends nothing until the user turns it
+    // on and changes something. A reader of its own for calibrating, read only
+    // while one runs.
+    m_calibrationInput = new AlphaEvoButtonInput(m_context, this);
     m_basePedals = new BasePedalController(
-        m_settings, m_context ? m_context->info() : UsbDeviceInfo{}, this);
+        m_settings, m_calibrationInput, m_context ? m_context->info() : UsbDeviceInfo{}, this);
 
     if (!m_settings->probe(&m_probeError)) {
         // Deliberately not a failure. Returning false would replace every tab

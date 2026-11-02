@@ -7,9 +7,11 @@
 #include <QStringList>
 #include <QTimer>
 
+#include <algorithm>
 #include <cstddef>
 #include <utility>
 
+#include "AlphaEvoButtonInput.h"
 #include "AlphaEvoSettings.h"
 #include "LedModeStore.h"
 
@@ -20,8 +22,18 @@ namespace {
 constexpr int kRepeats = 3;
 constexpr int kPaceMs = 110;
 
+/// How long after start-calibration has gone out the readings are taken from.
+/// SimPro's capture had raw readings within 150 ms; this leaves room.
+constexpr int kSettleMs = 300;
+
+/// How often readingsChanged() may fire.
+constexpr int kReadingsIntervalMs = 33;
+
 /// Above anything seen in a group, so a damaged saved value is not taken.
 constexpr int kGroupValueMax = 1000;
+
+/// Raw counts are 12 bits.
+constexpr int kRawMax = 4095;
 
 QString settingsPath(const UsbDeviceInfo &info, const char *name)
 {
@@ -29,49 +41,75 @@ QString settingsPath(const UsbDeviceInfo &info, const char *name)
         .arg(ledSettingsKey(info), QLatin1String(name));
 }
 
-QString groupToString(const PedalGroup &group)
+template<std::size_t N>
+QString numbersToString(const std::array<quint16, N> &numbers)
 {
     QStringList parts;
-    for (const quint16 value : group)
+    for (const quint16 value : numbers)
         parts << QString::number(value);
     return parts.join(u',');
 }
 
-bool groupFromString(const QString &text, PedalGroup *group)
+template<std::size_t N>
+bool numbersFromString(const QString &text, int maximum, std::array<quint16, N> *numbers)
 {
     const QStringList parts = text.split(u',');
-    if (parts.size() != kPedalGroupSize)
+    if (parts.size() != qsizetype(N))
         return false;
-    PedalGroup parsed{};
-    for (int i = 0; i < kPedalGroupSize; ++i) {
+    std::array<quint16, N> parsed{};
+    for (std::size_t i = 0; i < N; ++i) {
         bool ok = false;
-        const int value = parts.at(i).trimmed().toInt(&ok);
-        if (!ok || value < 0 || value > kGroupValueMax)
+        const int value = parts.at(qsizetype(i)).trimmed().toInt(&ok);
+        if (!ok || value < 0 || value > maximum)
             return false;
-        parsed[std::size_t(i)] = quint16(value);
+        parsed[i] = quint16(value);
     }
-    *group = parsed;
+    *numbers = parsed;
     return true;
+}
+
+bool isPedalGroup(int group)
+{
+    return group == kPedalBrakeGroup || group == kPedalThrottleGroup;
+}
+
+/// A sensor's new pair, from what was seen, or the old one if it barely moved.
+void takePair(int lowest, int highest, int pair, PedalSettings *settings)
+{
+    if (highest - lowest < BasePedalController::kMinimumTravel)
+        return;
+    const int low = qBound(0, lowest + BasePedalController::kCalibrationMargin, kRawMax);
+    const int high = qBound(low + 1, highest - BasePedalController::kCalibrationMargin, kRawMax);
+    settings->calibration[std::size_t(2 * pair)] = quint16(low);
+    settings->calibration[std::size_t(2 * pair + 1)] = quint16(high);
 }
 
 } // namespace
 
-BasePedalController::BasePedalController(AlphaEvoSettings *settings, UsbDeviceInfo info,
-                                         QObject *parent)
+BasePedalController::BasePedalController(AlphaEvoSettings *settings, AlphaEvoButtonInput *input,
+                                         UsbDeviceInfo info, QObject *parent)
     : QObject(parent)
     , m_settings(settings)
+    , m_input(input)
     , m_info(std::move(info))
     , m_pedals(capturedPedalSettings())
 {
     const QSettings store;
     m_enabled = store.value(settingsPath(m_info, "enabled")).toBool();
 
-    PedalGroup brake{};
-    if (groupFromString(store.value(settingsPath(m_info, "brakeGroup")).toString(), &brake))
-        m_pedals.groups[std::size_t(kPedalBrakeGroup)] = brake;
-    PedalGroup throttle{};
-    if (groupFromString(store.value(settingsPath(m_info, "throttleGroup")).toString(), &throttle))
-        m_pedals.groups[std::size_t(kPedalThrottleGroup)] = throttle;
+    for (const auto &[group, name] : {std::pair{kPedalBrakeGroup, "brakeGroup"},
+                                      std::pair{kPedalThrottleGroup, "throttleGroup"}}) {
+        PedalGroup saved{};
+        if (numbersFromString(store.value(settingsPath(m_info, name)).toString(), kGroupValueMax,
+                              &saved)) {
+            m_pedals.groups[std::size_t(group)] = saved;
+        }
+    }
+    std::array<quint16, kPedalCalibrationCount> calibration{};
+    if (numbersFromString(store.value(settingsPath(m_info, "calibration")).toString(), kRawMax,
+                          &calibration)) {
+        m_pedals.calibration = calibration;
+    }
     if (store.value(settingsPath(m_info, "brakeSensor")).toString() == QLatin1String("angle"))
         m_pedals.brakeSensor = PedalBrakeSensor::Angle;
 
@@ -80,10 +118,33 @@ BasePedalController::BasePedalController(AlphaEvoSettings *settings, UsbDeviceIn
     m_pace->setTimerType(Qt::PreciseTimer);
     connect(m_pace, &QTimer::timeout, this, &BasePedalController::sendNext);
 
+    m_readingsTimer = new QTimer(this);
+    m_readingsTimer->setInterval(kReadingsIntervalMs);
+    connect(m_readingsTimer, &QTimer::timeout, this, [this] {
+        if (std::exchange(m_readingsDirty, false))
+            Q_EMIT readingsChanged();
+    });
+
     if (m_settings) {
         connect(m_settings, &AlphaEvoSettings::pedalReportSent, this,
                 &BasePedalController::onReportSent);
     }
+    if (m_input) {
+        connect(m_input, &AlphaEvoButtonInput::inputReportReceived, this,
+                &BasePedalController::onInputReport);
+    }
+}
+
+BasePedalController::~BasePedalController()
+{
+    // Best effort: a calibration left running would leave the pedals reporting
+    // raw readings. Unpaced, since there is no event loop left to pace it.
+    if ((m_calibration == Calibration::Starting || m_calibration == Calibration::Measuring)
+        && m_settings) {
+        for (const QByteArray &report : composePedalCalibrationCancel(m_pedals))
+            m_settings->writePedalReportAsync(report);
+    }
+    stopWatching();
 }
 
 void BasePedalController::setEnabled(bool enabled)
@@ -103,12 +164,12 @@ void BasePedalController::setBrakeSensor(PedalBrakeSensor sensor)
 
 int BasePedalController::curveOf(int group) const
 {
-    return pedalCurveOf(m_pedals.groups[std::size_t(group)]);
+    return isPedalGroup(group) ? pedalCurveOf(m_pedals.groups[std::size_t(group)]) : -1;
 }
 
 void BasePedalController::setCurve(int group, int curve)
 {
-    if (curve < 0 || curve >= kPedalCurveCount)
+    if (!isPedalGroup(group) || curve < 0 || curve >= kPedalCurveCount)
         return;
     PedalSettings next = m_pedals;
     PedalGroup &pedal = next.groups[std::size_t(group)];
@@ -119,19 +180,56 @@ void BasePedalController::setCurve(int group, int curve)
     change(next);
 }
 
+std::array<int, kPedalCurvePointCount> BasePedalController::curvePointsOf(int group) const
+{
+    std::array<int, kPedalCurvePointCount> percents{};
+    if (!isPedalGroup(group))
+        return percents;
+    const PedalGroup &pedal = m_pedals.groups[std::size_t(group)];
+    for (int i = 0; i < kPedalCurvePointCount; ++i)
+        percents[std::size_t(i)] = pedalCurvePercent(pedal[std::size_t(kPedalCurveFirstIndex + i)]);
+    return percents;
+}
+
+void BasePedalController::setCurvePoints(int group,
+                                         const std::array<int, kPedalCurvePointCount> &percents)
+{
+    if (!isPedalGroup(group))
+        return;
+    PedalSettings next = m_pedals;
+    PedalGroup &pedal = next.groups[std::size_t(group)];
+    const std::array<int, kPedalCurvePointCount> current = curvePointsOf(group);
+    int below = 0;
+    for (int i = 0; i < kPedalCurvePointCount; ++i) {
+        const int percent = qBound(below, percents[std::size_t(i)], 100);
+        below = percent;
+        // A point left as it was keeps its exact value, which a hand-drawn curve
+        // may hold between two whole percentages.
+        if (percent != current[std::size_t(i)])
+            pedal[std::size_t(kPedalCurveFirstIndex + i)] = quint16(pedalCurveValue(percent));
+    }
+    change(next);
+}
+
 int BasePedalController::rangeStartOf(int group) const
 {
+    if (!isPedalGroup(group))
+        return 0;
     return pedalRangePercent(
         m_pedals.groups[std::size_t(group)][std::size_t(kPedalRangeStartIndex)]);
 }
 
 int BasePedalController::rangeEndOf(int group) const
 {
+    if (!isPedalGroup(group))
+        return 100;
     return pedalRangePercent(m_pedals.groups[std::size_t(group)][std::size_t(kPedalRangeEndIndex)]);
 }
 
 void BasePedalController::setRange(int group, int startPercent, int endPercent)
 {
+    if (!isPedalGroup(group))
+        return;
     const int start = qBound(0, startPercent, 99);
     const int end = qBound(start + 1, endPercent, 100);
     PedalSettings next = m_pedals;
@@ -152,20 +250,128 @@ void BasePedalController::change(const PedalSettings &next)
         return;
     m_pedals = next;
     save();
+    Q_EMIT settingsChanged();
 
     if (!m_enabled || !m_settings)
         return;
-    if (isSending()) {
+    if (isSending() || m_calibration != Calibration::Idle) {
         m_changedWhileSending = true;
         return;
     }
-    startUpdate();
+    sendReports(composePedalUpdate(m_pedals));
 }
 
-void BasePedalController::startUpdate()
+// --- Calibrating ------------------------------------------------------------------
+
+bool BasePedalController::canCalibrate() const
+{
+    return m_enabled && m_settings && m_input && !isSending()
+           && m_calibration == Calibration::Idle;
+}
+
+void BasePedalController::startCalibration()
+{
+    if (!canCalibrate())
+        return;
+
+    m_readings = {};
+    m_input->setForwardsReports(true);
+    m_input->setEnabled(true);
+    setCalibration(Calibration::Starting);
+    sendReports(composePedalCalibrationStart());
+}
+
+void BasePedalController::saveCalibration()
+{
+    if (m_calibration != Calibration::Starting && m_calibration != Calibration::Measuring)
+        return;
+
+    PedalSettings next = m_pedals;
+    if (m_readings.seen) {
+        const Readings &r = m_readings;
+        takePair(r.lowest.brakeFirst, r.highest.brakeFirst, kPedalCalibrationBrakeFirstPair,
+                 &next);
+        takePair(r.lowest.brakeSecond, r.highest.brakeSecond, kPedalCalibrationBrakeSecondPair,
+                 &next);
+        takePair(r.lowest.throttle, r.highest.throttle, kPedalCalibrationThrottlePair, &next);
+    }
+
+    stopWatching();
+    if (next != m_pedals) {
+        m_pedals = next;
+        save();
+        Q_EMIT settingsChanged();
+    }
+    setCalibration(Calibration::Finishing);
+    // Ends the calibration whatever was measured: with nothing new, the old
+    // calibration goes back, and the update restates it.
+    sendReports(composePedalCalibrationSave(m_pedals));
+}
+
+void BasePedalController::cancelCalibration()
+{
+    if (m_calibration != Calibration::Starting && m_calibration != Calibration::Measuring)
+        return;
+
+    stopWatching();
+    setCalibration(Calibration::Finishing);
+    sendReports(composePedalCalibrationCancel(m_pedals));
+}
+
+void BasePedalController::onInputReport(const QByteArray &report)
+{
+    if (m_calibration != Calibration::Measuring || !m_measuring.isValid()
+        || m_measuring.elapsed() < kSettleMs) {
+        return;
+    }
+    const std::optional<PedalRawReadings> raw = pedalRawReadings(report);
+    if (!raw)
+        return;
+
+    Readings &r = m_readings;
+    if (!r.seen) {
+        r.seen = true;
+        r.lowest = *raw;
+        r.highest = *raw;
+    }
+    r.current = *raw;
+    r.lowest.brakeFirst = std::min(r.lowest.brakeFirst, raw->brakeFirst);
+    r.lowest.throttle = std::min(r.lowest.throttle, raw->throttle);
+    r.lowest.brakeSecond = std::min(r.lowest.brakeSecond, raw->brakeSecond);
+    r.highest.brakeFirst = std::max(r.highest.brakeFirst, raw->brakeFirst);
+    r.highest.throttle = std::max(r.highest.throttle, raw->throttle);
+    r.highest.brakeSecond = std::max(r.highest.brakeSecond, raw->brakeSecond);
+    m_readingsDirty = true;
+}
+
+void BasePedalController::setCalibration(Calibration state)
+{
+    if (m_calibration == state)
+        return;
+    m_calibration = state;
+    if (state == Calibration::Measuring) {
+        m_measuring.start();
+        m_readingsTimer->start();
+    }
+    Q_EMIT calibrationChanged(state);
+}
+
+void BasePedalController::stopWatching()
+{
+    m_readingsTimer->stop();
+    m_measuring.invalidate();
+    if (m_input) {
+        m_input->setForwardsReports(false);
+        m_input->setEnabled(false);
+    }
+}
+
+// --- Sending ----------------------------------------------------------------------
+
+void BasePedalController::sendReports(const QList<QByteArray> &reports)
 {
     m_queue.clear();
-    for (const QByteArray &report : composePedalUpdate(m_pedals)) {
+    for (const QByteArray &report : reports) {
         for (int i = 0; i < kRepeats; ++i)
             m_queue << report;
     }
@@ -173,24 +379,46 @@ void BasePedalController::startUpdate()
     m_updateError.clear();
     m_updateDryRun = false;
 
+    const bool wasSending = isSending();
     m_pace->start();
-    Q_EMIT sendingChanged(true);
+    if (!wasSending)
+        Q_EMIT sendingChanged(true);
     sendNext();
 }
 
 void BasePedalController::sendNext()
 {
-    if (m_queue.isEmpty()) {
-        m_pace->stop();
-        Q_EMIT updateSent(!m_updateFailed, m_updateError, m_updateDryRun);
-        if (std::exchange(m_changedWhileSending, false) && m_enabled) {
-            startUpdate();
-            return;
-        }
-        Q_EMIT sendingChanged(false);
+    if (!m_queue.isEmpty()) {
+        if (m_settings)
+            m_settings->writePedalReportAsync(m_queue.takeFirst());
+        else
+            m_queue.clear();
         return;
     }
-    m_settings->writePedalReportAsync(m_queue.takeFirst());
+
+    m_pace->stop();
+    Q_EMIT updateSent(!m_updateFailed, m_updateError, m_updateDryRun);
+
+    if (m_calibration == Calibration::Starting) {
+        // A start that did not go out leaves nothing to measure, and nothing to
+        // end.
+        if (m_updateFailed) {
+            stopWatching();
+            setCalibration(Calibration::Idle);
+        } else {
+            setCalibration(Calibration::Measuring);
+        }
+    } else if (m_calibration == Calibration::Finishing) {
+        setCalibration(Calibration::Idle);
+    }
+
+    if (m_calibration == Calibration::Idle && std::exchange(m_changedWhileSending, false)
+        && m_enabled) {
+        sendReports(composePedalUpdate(m_pedals));
+        return;
+    }
+    if (!isSending())
+        Q_EMIT sendingChanged(false);
 }
 
 void BasePedalController::onReportSent(bool ok, const QString &error, bool dryRun)
@@ -207,9 +435,10 @@ void BasePedalController::save() const
 {
     QSettings store;
     store.setValue(settingsPath(m_info, "brakeGroup"),
-                   groupToString(m_pedals.groups[std::size_t(kPedalBrakeGroup)]));
+                   numbersToString(m_pedals.groups[std::size_t(kPedalBrakeGroup)]));
     store.setValue(settingsPath(m_info, "throttleGroup"),
-                   groupToString(m_pedals.groups[std::size_t(kPedalThrottleGroup)]));
+                   numbersToString(m_pedals.groups[std::size_t(kPedalThrottleGroup)]));
+    store.setValue(settingsPath(m_info, "calibration"), numbersToString(m_pedals.calibration));
     store.setValue(settingsPath(m_info, "brakeSensor"),
                    m_pedals.brakeSensor == PedalBrakeSensor::Angle ? QStringLiteral("angle")
                                                                    : QStringLiteral("loadCell"));

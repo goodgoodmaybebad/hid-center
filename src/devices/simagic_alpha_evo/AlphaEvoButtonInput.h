@@ -155,6 +155,11 @@ public:
     qint32 throttleRawMax() const { return m_throttle.logicalMax; }
     qint32 brakeRawMax() const { return m_brake.logicalMax; }
 
+    /// Whether every joystick report read is also handed on whole, through
+    /// inputReportReceived(). Off by default: the report comes about a thousand
+    /// times a second, and only a pedal calibration wants it raw.
+    void setForwardsReports(bool forwards) { m_forwardsReports = forwards; }
+
 Q_SIGNALS:
     void pressedChanged(const QList<int> &pressed);
 
@@ -163,6 +168,10 @@ Q_SIGNALS:
 
     /// Either pedal axis moved.
     void pedalsChanged();
+
+    /// A joystick report was read, as received. Only while setForwardsReports()
+    /// is on.
+    void inputReportReceived(const QByteArray &report);
     void sourceStateChanged(hidcenter::simagic_alpha_evo::ForceTraceSource state);
 
 private Q_SLOTS:
@@ -191,6 +200,7 @@ private:
 
     ForceTraceSource m_state = ForceTraceSource::NoSuchReport;
     bool m_enabled = false;
+    bool m_forwardsReports = false;
     int m_buttonCount = 0;
 
     /// Taken from enumeration data, and again from the handle once open, which

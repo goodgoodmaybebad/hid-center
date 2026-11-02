@@ -39,9 +39,10 @@ The plugin adds six tabs to the device page.
   SIMAGIC's own software set on it, LEDs included, stays.
 - **Pedals**: shows pedals plugged into the base by CAN-Bus, such as a P1000 in
   its blue-light mode, as live throttle and brake bars, and sets the brake's
-  sensor (load cell or angle), and the brake's and the throttle's curve
-  (SimPro's four) and range. Off until turned on, since every change restates
-  settings and a calibration that cannot be read back.
+  sensor (load cell or angle), the brake's and the throttle's curve (SimPro's
+  four, or three points of its own) and range, and calibrates them. Off until
+  turned on, since every change restates settings and a calibration that cannot
+  be read back.
 
 Settings are saved and re-applied to the wheel at start-up. Each page has a dry-run
 option that logs the exact bytes instead of sending them. An offline preview lets

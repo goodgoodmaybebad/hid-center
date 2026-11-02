@@ -244,6 +244,8 @@ void AlphaEvoButtonInput::onInputReport(const QByteArray &report)
 {
     if (report.isEmpty() || quint8(report.at(0)) != kButtonReportId)
         return;
+    if (m_forwardsReports)
+        Q_EMIT inputReportReceived(report);
     setPressed(pressedButtons(report, m_bits));
     if (hasClutchAxes())
         setClutch(axisValue(report, m_leftClutch), axisValue(report, m_rightClutch));

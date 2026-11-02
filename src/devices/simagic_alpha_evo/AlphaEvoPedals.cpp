@@ -230,6 +230,111 @@ static_assert(curveIndexOf(latestGroup(kPedalThrottleGroup)) == 0
                   && rangePercent(latestGroup(kPedalThrottleGroup)[kPedalRangeEndIndex]) == 85,
               "the throttle is linear, to 85 %, in the latest capture");
 
+// --- Curve points -------------------------------------------------------------
+
+constexpr int kCurveZero = 410;
+
+constexpr int curveValue(int percent)
+{
+    const int clamped = percent < 0 ? 0 : percent > 100 ? 100 : percent;
+    return kCurveZero - (clamped * 28 + 5) / 10;
+}
+
+constexpr int curvePercent(int value)
+{
+    const int clamped = value < kCurveZero - 280 ? kCurveZero - 280
+                        : value > kCurveZero     ? kCurveZero
+                                                 : value;
+    return ((kCurveZero - clamped) * 10 + 14) / 28;
+}
+
+constexpr bool presetIs(int curve, int at25, int at50, int at75)
+{
+    const PedalCurve &points = kPedalCurves[std::size_t(curve)];
+    return points[0] == curveValue(at25) && points[1] == curveValue(at50)
+           && points[2] == curveValue(at75) && curvePercent(points[0]) == at25
+           && curvePercent(points[1]) == at50 && curvePercent(points[2]) == at75;
+}
+
+// The line is a reading of the four presets, so every one of them has to be on
+// it, both ways.
+static_assert(presetIs(0, 25, 50, 75), "linear is 25, 50 and 75 %");
+static_assert(presetIs(1, 10, 30, 60), "the second curve is 10, 30 and 60 %");
+static_assert(presetIs(2, 40, 70, 90), "the third curve is 40, 70 and 90 %");
+static_assert(presetIs(3, 10, 50, 90), "the fourth curve is 10, 50 and 90 %");
+static_assert(curveValue(0) == 410 && curveValue(100) == 130, "the line runs from 410 to 130");
+
+// --- Raw readings --------------------------------------------------------------
+
+/// Where they are in report 0x01, as received: the report's id is byte 0.
+constexpr int kRawFirstByte = 30;
+constexpr int kRawByteCount = 5;
+using RawBytes = std::array<quint8, kRawByteCount>;
+
+constexpr PedalRawReadings rawReadingsOf(const RawBytes &bytes)
+{
+    PedalRawReadings readings;
+    readings.brakeFirst = bytes[0] | (bytes[1] & 0x0f) << 8;
+    readings.throttle = bytes[2] | (bytes[3] & 0x0f) << 8;
+    readings.brakeSecond = (bytes[3] >> 4) | bytes[4] << 4;
+    return readings;
+}
+
+constexpr bool readsAs(const RawBytes &bytes, int brakeFirst, int throttle, int brakeSecond)
+{
+    const PedalRawReadings readings = rawReadingsOf(bytes);
+    return readings.brakeFirst == brakeFirst && readings.throttle == throttle
+           && readings.brakeSecond == brakeSecond;
+}
+
+// Bytes 30 to 34 of three reports from `pedal-calibration.pcapng`, while it was
+// calibrating: frame 21419 at rest, 30803 with the brake pressed, and 42837 with
+// the throttle pressed. Each pedal moves its own sensors and no other.
+static_assert(readsAs({0xa7, 0x85, 0xe8, 0x05, 0x39}, 1447, 1512, 912),
+              "at rest, every sensor near its lowest");
+static_assert(readsAs({0xd9, 0x87, 0xe9, 0x95, 0x83}, 2009, 1513, 2105),
+              "the brake moves both its sensors, and not the throttle's");
+static_assert(readsAs({0xad, 0x85, 0xc7, 0x59, 0x39}, 1453, 2503, 917),
+              "the throttle moves its sensor, and not the brake's");
+
+// --- Calibrating -----------------------------------------------------------------
+
+constexpr quint8 kCommandCalibrationStart = 0x1c;
+constexpr quint8 kCommandCalibrationEnd = 0x1d;
+
+// What SimPro restated after saving a calibration, after the update, typed out
+// from `pedal-calibration.pcapng`: frames 54224, 55007 and 55634. What they set
+// is not known. `1b`'s bytes are also in every `f6` reply captured.
+constexpr std::array<quint8, 12> kAfterCalibration16{};
+constexpr std::array<quint8, 12> kAfterCalibration1b{0x04, 0xff, 0x68, 0x00, 0x64, 0x04,
+                                                     0x04, 0xff, 0x00, 0x00, 0x64, 0x04};
+constexpr std::array<quint8, 5> kAfterCalibration17{};
+
+/// Frames 19691 and 51350: start-calibration and end-calibration.
+constexpr Report kCaptureCalibrationStart{0x80, 0x1d, 0x0a, 0x01, 0x02, 0xf1, 0x1c};
+constexpr Report kCaptureCalibrationEnd{0x80, 0x1d, 0x0a, 0x01, 0x02, 0xf1, 0x1d};
+
+/// Frames 54224, 55007 and 55634, whole.
+constexpr Report kCaptureAfterCalibration16{0x80, 0x1d, 0x0a, 0x01, 0x0e, 0xf1, 0x16};
+constexpr Report kCaptureAfterCalibration1b{0x80, 0x1d, 0x0a, 0x01, 0x0e, 0xf1, 0x1b,
+                                            0x04, 0xff, 0x68, 0x00, 0x64, 0x04, 0x04,
+                                            0xff, 0x00, 0x00, 0x64, 0x04};
+constexpr Report kCaptureAfterCalibration17{0x80, 0x1d, 0x0a, 0x01, 0x07, 0xf1, 0x17};
+
+static_assert(composeReport(kCommandCalibrationStart, nullptr, 0) == kCaptureCalibrationStart,
+              "start-calibration must match the capture");
+static_assert(composeReport(kCommandCalibrationEnd, nullptr, 0) == kCaptureCalibrationEnd,
+              "end-calibration must match the capture");
+static_assert(composeReport(0x16, kAfterCalibration16.data(), int(kAfterCalibration16.size()))
+                  == kCaptureAfterCalibration16,
+              "report 16 must match the capture");
+static_assert(composeReport(0x1b, kAfterCalibration1b.data(), int(kAfterCalibration1b.size()))
+                  == kCaptureAfterCalibration1b,
+              "report 1b must match the capture");
+static_assert(composeReport(0x17, kAfterCalibration17.data(), int(kAfterCalibration17.size()))
+                  == kCaptureAfterCalibration17,
+              "report 17 must match the capture");
+
 QByteArray toByteArray(const Report &report)
 {
     return QByteArray(reinterpret_cast<const char *>(report.data()), int(report.size()));
@@ -261,6 +366,51 @@ QList<QByteArray> composePedalUpdate(const PedalSettings &settings)
 {
     return {toByteArray(calibrationReport(settings)), toByteArray(settingsReport(settings)),
             toByteArray(brakeSensorReport(settings))};
+}
+
+int pedalCurveValue(int percent)
+{
+    return curveValue(percent);
+}
+
+int pedalCurvePercent(int value)
+{
+    return curvePercent(value);
+}
+
+std::optional<PedalRawReadings> pedalRawReadings(const QByteArray &report)
+{
+    if (report.size() < kRawFirstByte + kRawByteCount || quint8(report.at(0)) != 0x01)
+        return std::nullopt;
+    RawBytes bytes{};
+    for (int i = 0; i < kRawByteCount; ++i)
+        bytes[std::size_t(i)] = quint8(report.at(kRawFirstByte + i));
+    return rawReadingsOf(bytes);
+}
+
+QList<QByteArray> composePedalCalibrationStart()
+{
+    return {toByteArray(composeReport(kCommandCalibrationStart, nullptr, 0))};
+}
+
+QList<QByteArray> composePedalCalibrationSave(const PedalSettings &settings)
+{
+    QList<QByteArray> reports{toByteArray(calibrationReport(settings)),
+                              toByteArray(composeReport(kCommandCalibrationEnd, nullptr, 0))};
+    reports << composePedalUpdate(settings);
+    reports << toByteArray(composeReport(0x16, kAfterCalibration16.data(),
+                                         int(kAfterCalibration16.size())))
+            << toByteArray(composeReport(0x1b, kAfterCalibration1b.data(),
+                                         int(kAfterCalibration1b.size())))
+            << toByteArray(composeReport(0x17, kAfterCalibration17.data(),
+                                         int(kAfterCalibration17.size())));
+    return reports;
+}
+
+QList<QByteArray> composePedalCalibrationCancel(const PedalSettings &settings)
+{
+    return {toByteArray(calibrationReport(settings)),
+            toByteArray(composeReport(kCommandCalibrationEnd, nullptr, 0))};
 }
 
 } // namespace hidcenter::simagic_alpha_evo

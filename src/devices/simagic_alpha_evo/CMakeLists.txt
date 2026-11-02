@@ -27,6 +27,8 @@ hidcenter_add_device_plugin(
         ui/WheelPage.h
         ui/PedalsPage.cpp
         ui/PedalsPage.h
+        ui/PedalCalibrationDialog.cpp
+        ui/PedalCalibrationDialog.h
         ui/WheelSchematic.cpp
         ui/WheelSchematic.h
         ui/WheelLayouts.cpp

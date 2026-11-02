@@ -8,6 +8,7 @@
 #include <QtGlobal>
 
 #include <array>
+#include <optional>
 
 namespace hidcenter::simagic_alpha_evo {
 
@@ -73,6 +74,48 @@ inline constexpr std::array<PedalCurve, kPedalCurveCount> kPedalCurves{{
 
 /// Which of kPedalCurves a group has, or -1 for none of them.
 int pedalCurveOf(const PedalGroup &group);
+
+/// A curve point as a group holds it, from the output it gives, 0 to 100 %, and
+/// back: 410 at 0 %, 130 at 100 %, in a straight line. All four of SimPro's
+/// curves are on that line exactly.
+int pedalCurveValue(int percent);
+int pedalCurvePercent(int value);
+
+/// The pedals' sensors as the base reports them while calibrating, raw counts,
+/// 12 bits each.
+struct PedalRawReadings
+{
+    int brakeFirst = 0;
+    int throttle = 0;
+    int brakeSecond = 0;
+};
+
+/// Each sensor's lowest and highest raw count in PedalSettings::calibration:
+/// the pair at that index, lowest first.
+inline constexpr int kPedalCalibrationBrakeFirstPair = 1;
+inline constexpr int kPedalCalibrationBrakeSecondPair = 2;
+inline constexpr int kPedalCalibrationThrottlePair = 3;
+
+/// The raw readings in joystick report `report`, as received, report id first.
+/// Nothing when it is not report 0x01 or too short.
+///
+/// Only meaningful between the start and the end of a calibration: the same
+/// bytes are the calibrated pedal axes otherwise. At fixed offsets, from the
+/// capture, not from the descriptor.
+std::optional<PedalRawReadings> pedalRawReadings(const QByteArray &report);
+
+/// The reports that put the pedals into calibrating: start-calibration.
+QList<QByteArray> composePedalCalibrationStart();
+
+/// The reports that save a calibration and end it, as SimPro sent them:
+/// `settings`'s calibration, end-calibration, then the whole update with that
+/// calibration, then three more reports SimPro restated, whose meaning is not
+/// known, as captured.
+QList<QByteArray> composePedalCalibrationSave(const PedalSettings &settings);
+
+/// The reports that end a calibration without changing it: `settings`'s
+/// calibration, the one held before it started, and end-calibration.
+QList<QByteArray> composePedalCalibrationCancel(const PedalSettings &settings);
 
 /// A range end as a group holds it, from a percentage, 0 to 100, and back:
 /// 6 at 0 %, 302 at 100 %, in a straight line. SimPro showed 41 as 12 % and

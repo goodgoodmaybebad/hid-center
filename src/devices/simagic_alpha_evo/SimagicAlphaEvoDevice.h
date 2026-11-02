@@ -41,6 +41,7 @@ private:
     AlphaEvoForceTrace *m_forceTrace = nullptr;
     AlphaEvoButtonInput *m_buttons = nullptr;
     AlphaEvoButtonInput *m_pedalInput = nullptr;
+    AlphaEvoButtonInput *m_calibrationInput = nullptr;
     BasePedalController *m_basePedals = nullptr;
 
     /// Why probing failed, empty when it succeeded. Kept rather than returned,

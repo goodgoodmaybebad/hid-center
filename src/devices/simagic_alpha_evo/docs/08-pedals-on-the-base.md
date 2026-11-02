@@ -9,13 +9,21 @@ Everything here is from two captures of SIMAGIC SimPro Manager and a two-pedal
 P1000 (throttle and brake) on an Alpha Evo: `pedal-calibration.pcapng`,
 calibrating it, and `pedal-settings.pcapng`, changing the brake's settings.
 
-**What the app sends** is only the settings update, for the brake and the
-throttle, starting from what the latest capture, `throttle-range.pcapng`, had:
-see
-[Every settings change is the same update](#every-settings-change-is-the-same-update),
-`AlphaEvoPedals.h` and `BasePedalController.h`. It never calibrates, never asks
-for the `f6` reply, and never sends `f1 18`; it sends nothing until the user has
-turned brake settings on and changed one.
+**What the app sends**, starting from what the latest capture,
+`throttle-range.pcapng`, had: the settings update, for the brake and the
+throttle, with any curve points, not only SimPro's four (see
+[Every settings change is the same update](#every-settings-change-is-the-same-update));
+and a calibration, as SimPro's went (see [`f1 20`](#f1-20-the-calibration)):
+`1c`, the raw readings watched, then `20` with the new pairs, `1d`, the update,
+and `16`, `1b`, `17` as captured; or, cancelled, `20` with the old pairs and
+`1d`. Each saved pair is 16 counts inside what was seen at each end, and a sensor
+that moved less than 200 counts keeps its old pair. See `AlphaEvoPedals.h` and
+`BasePedalController.h`. It never asks for the `f6` reply and never sends
+`f1 18`; it sends nothing until the user has turned pedal settings on and
+changed one or started a calibration.
+
+**Curve points** are on one line, all four presets exactly: a point is
+`410 − 2.8 × output %`, 410 at 0 % and 130 at 100 %.
 
 What SimPro had the brake set to throughout, by its owner: **load cell** mode
 (the other is angle, the second sensor), shown in **%** (the other is kg), a
