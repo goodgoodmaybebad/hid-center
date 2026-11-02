@@ -13,6 +13,8 @@ qt_add_executable(hid-center
     DeviceView.h
     HomePage.cpp
     HomePage.h
+    InterfaceScale.cpp
+    InterfaceScale.h
     AnalyzerTab.cpp
     AnalyzerTab.h
     LogPanel.cpp

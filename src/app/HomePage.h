@@ -7,6 +7,7 @@
 
 #include <QPointer>
 
+class QGroupBox;
 class QLabel;
 
 namespace hidcenter {
@@ -38,6 +39,9 @@ private Q_SLOTS:
 
 private:
     QString statusHtml() const;
+
+    /// The interface size, and a button to restart into a new one.
+    QGroupBox *makeAppearanceBox(QWidget *parent);
 
     PluginManager *m_plugins = nullptr;
     IUsbBackend *m_backend = nullptr;

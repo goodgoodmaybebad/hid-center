@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Micael Dias
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "app/InterfaceScale.h"
 #include "app/MainWindow.h"
 #include "core/DeveloperMode.h"
 #include "core/Logging.h"
@@ -165,6 +166,9 @@ int main(int argc, char **argv)
         QCoreApplication app(argc, argv);
         return dumpDevices();
     }
+
+    // Before the application object, which is when Qt fixes its scale.
+    applyInterfaceScale();
 
     QApplication app(argc, argv);
     QGuiApplication::setDesktopFileName(QStringLiteral("hid-center"));
