@@ -148,8 +148,7 @@ WheelPage::WheelPage(WheelConfigController *wheel, AlphaEvoButtonInput *buttons,
     managedLayout->addWidget(m_managed);
     auto *managedNote = new QLabel(
         tr("Nothing is sent to the wheel, so what SIMAGIC SimPro Manager set on it, its LEDs "
-           "and shift lights included, stays. The settings below cannot be changed meanwhile.
-"
+           "and shift lights included, stays. The settings below cannot be changed meanwhile.\n"
            "Turning this off sends the wheel this page's settings, replacing SimPro's."),
         m_managedBox);
     managedNote->setWordWrap(true);
