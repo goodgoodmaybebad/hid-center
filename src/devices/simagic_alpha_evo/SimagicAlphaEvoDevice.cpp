@@ -11,6 +11,7 @@
 #include "WheelLedController.h"
 #include "core/Logging.h"
 #include "ui/MainSettingsPage.h"
+#include "ui/PedalsPage.h"
 #include "ui/StatusPage.h"
 #include "ui/TelemetryPage.h"
 #include "ui/WheelPage.h"
@@ -63,6 +64,10 @@ bool SimagicAlphaEvoDevice::initialize(QString *error)
     // The buttons pressed on the wheel, from the same input report, for the
     // same reasons. The Wheel tab switches it on while it is shown.
     m_buttons = new AlphaEvoButtonInput(m_context, this);
+
+    // The same report again, for the Pedals tab. A reader of its own, so the
+    // Wheel tab hiding as the Pedals tab shows cannot switch it off.
+    m_pedalInput = new AlphaEvoButtonInput(m_context, this);
 
     if (!m_settings->probe(&m_probeError)) {
         // Deliberately not a failure. Returning false would replace every tab
@@ -117,7 +122,8 @@ QVector<DevicePage> SimagicAlphaEvoDevice::pages()
             {tr("FFB Settings"), new MainSettingsPage(m_modelName, m_settings, m_probeError)},
             {tr("Telemetry"), new TelemetryPage(m_telemetry, m_settings)},
             {tr("Wheelbase LED"), new WheelbaseLedPage(m_leds, m_settings, m_probeError)},
-            {tr("Wheel"), new WheelPage(m_wheelConfig, m_buttons, m_settings, m_probeError)}};
+            {tr("Wheel"), new WheelPage(m_wheelConfig, m_buttons, m_settings, m_probeError)},
+            {tr("Pedals"), new PedalsPage(m_pedalInput)}};
 }
 
 } // namespace hidcenter::simagic_alpha_evo

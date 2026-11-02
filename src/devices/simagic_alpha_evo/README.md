@@ -6,7 +6,7 @@ steering wheel attached to it from Linux.
 
 ## What it does
 
-The plugin adds five tabs to the device page.
+The plugin adds six tabs to the device page.
 
 - **Status**: shows what the base is doing: firmware version, state, motor and
   MOSFET temperatures, bus voltage, and which steering wheel is attached. It also
@@ -34,6 +34,9 @@ The plugin adds five tabs to the device page.
   - whether the clutch paddles are synced, and their ratio
 
   It also shows pressed buttons and the clutch paddles live.
+- **Pedals**: shows pedals plugged into the base by CAN-Bus, such as a P1000 in
+  its blue-light mode, as live throttle and brake bars. Read only: their settings
+  cannot be changed yet.
 
 Settings are saved and re-applied to the wheel at start-up. Each page has a dry-run
 option that logs the exact bytes instead of sending them. An offline preview lets

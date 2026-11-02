@@ -39,6 +39,7 @@ private:
     WheelConfigController *m_wheelConfig = nullptr;
     AlphaEvoForceTrace *m_forceTrace = nullptr;
     AlphaEvoButtonInput *m_buttons = nullptr;
+    AlphaEvoButtonInput *m_pedalInput = nullptr;
 
     /// Why probing failed, empty when it succeeded. Kept rather than returned,
     /// because a base that will not talk is still worth showing a page for.

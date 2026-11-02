@@ -58,6 +58,13 @@ QList<int> pressedButtons(const QByteArray &report, const QList<ButtonBit> &bits
 inline constexpr quint32 kLeftClutchUsage = 0x00010036;   ///< Slider
 inline constexpr quint32 kRightClutchUsage = 0x00010035;  ///< Rz
 
+/// Where pedals connected to the base by CAN-Bus are in the joystick report, by
+/// their Generic Desktop usage. Found with a two-pedal P1000 by pressing each
+/// in turn: 0 released and the top of the axis's range pressed fully. Where a
+/// clutch pedal goes has not been seen.
+inline constexpr quint32 kThrottlePedalUsage = 0x00010031; ///< Y
+inline constexpr quint32 kBrakePedalUsage = 0x00010032;    ///< Z
+
 /// The byte of the joystick report, as received, where the wheel says what its
 /// clutch ratio is set to, as a percentage. It followed every value written
 /// to kWheelConfigClutchRatioOffset on a GTC, straight away. Not read for now:
@@ -86,8 +93,8 @@ AxisField axisFieldOf(const ReportDescriptor &descriptor, quint8 reportId, quint
 /// logical minimum when the report is too short to hold it.
 qint32 axisValue(const QByteArray &report, const AxisField &axis);
 
-/// The joystick buttons pressed on the wheel, and where its clutch paddles are,
-/// as the UI sees them.
+/// The joystick buttons pressed on the wheel, and where its clutch paddles and
+/// any pedals on the base are, as the UI sees them.
 ///
 /// A listener and a decode, like AlphaEvoForceTrace, and reading the same
 /// report from the same interface, which it claims and lets go of in the same
@@ -135,11 +142,27 @@ public:
     qreal leftClutch() const;
     qreal rightClutch() const;
 
+    /// Whether the report has both pedal axes. True whether or not pedals are
+    /// plugged into the base: the axes are there either way, and read 0.
+    bool hasPedalAxes() const { return m_throttle.isValid() && m_brake.isValid(); }
+
+    /// How far each pedal is pressed, 0 to 1, and as the raw value with the top
+    /// of its range, as the last report had it. 0 while not enabled.
+    qreal throttle() const;
+    qreal brake() const;
+    qint32 throttleRaw() const { return m_throttleValue; }
+    qint32 brakeRaw() const { return m_brakeValue; }
+    qint32 throttleRawMax() const { return m_throttle.logicalMax; }
+    qint32 brakeRawMax() const { return m_brake.logicalMax; }
+
 Q_SIGNALS:
     void pressedChanged(const QList<int> &pressed);
 
     /// Either clutch axis moved.
     void clutchChanged();
+
+    /// Either pedal axis moved.
+    void pedalsChanged();
     void sourceStateChanged(hidcenter::simagic_alpha_evo::ForceTraceSource state);
 
 private Q_SLOTS:
@@ -152,10 +175,11 @@ private:
     void setState(ForceTraceSource state);
     void setPressed(const QList<int> &pressed);
     void setClutch(qint32 left, qint32 right);
+    void setPedals(qint32 throttle, qint32 brake);
 
-    /// Find the clutch axes in a descriptor, keeping what was found before when
-    /// it has none.
-    void findClutchAxes(const ReportDescriptor &descriptor);
+    /// Find the clutch and pedal axes in a descriptor, keeping what was found
+    /// before for whichever pair it has none of.
+    void findAxes(const ReportDescriptor &descriptor);
 
     /// The HID interface whose input report 0x01 has buttons, or nullptr.
     const UsbInterfaceInfo *buttonInterface() const;
@@ -178,6 +202,11 @@ private:
     AxisField m_rightClutch;
     qint32 m_leftClutchValue = 0;
     qint32 m_rightClutchValue = 0;
+
+    AxisField m_throttle;
+    AxisField m_brake;
+    qint32 m_throttleValue = 0;
+    qint32 m_brakeValue = 0;
 };
 
 } // namespace hidcenter::simagic_alpha_evo

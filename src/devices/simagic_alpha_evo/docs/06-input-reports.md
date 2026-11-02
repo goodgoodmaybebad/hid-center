@@ -56,6 +56,21 @@ what they make together.
 of the payload): the percentage last written to the wheel configuration's
 offset 232, following each write straight away. The app does not read it.
 
+## Pedals on the base
+
+Pedals plugged into the base by CAN-Bus (a P1000 with its light blue) are two
+more of the report's axes, found from the descriptor by usage:
+
+| Pedal | Usage (Generic Desktop) | Range |
+| --- | --- | --- |
+| Throttle | `0x31` Y | 0 released … 4095 pressed fully |
+| Brake | `0x32` Z | 0 released … 4095 pressed fully |
+
+Seen with a two-pedal P1000 by pressing each in turn. Where a clutch pedal goes
+has not been seen. The axes are declared whether or not pedals are attached, and
+read 0 without them. Pedals in USB mode (light green) are a USB device of their
+own and are not in this report.
+
 ## Applied force
 
 The force the base is applying is carried in **two bytes of report `0x01` at a
