@@ -76,7 +76,7 @@ does not have to rediscover it:
 | Wheel config brightness (byte 230) | Confirmed from captures. |
 | Wheel config LED slots, mappings, RPM thresholds/patterns | Inferred from captured blocks and checked against them; the trigger meanings 3–5 (pit limiter, DRS, flag) "have not been seen working". |
 | Wheel config bytes 231–232 (clutch mode and ratio) | Tried on a GTC: written, and the paddles watched in the joystick report. Mode values other than 0 and 1 not tried. |
-| Wheel config on a GT Neo | Wheel id 6 and every input's place in the mappings confirmed on a real wheel. Its LED slots, RPM patterns and clutch bytes not yet worked out: it is sent the GTC's. |
+| Wheel config on a GT Neo | Wheel id 6 and every input's place in the mappings confirmed on a real wheel. Its whole block captured from SimPro (`rpm-light-setting.pcapng`): one RPM colour change moved exactly the byte the GTC's layout predicts, for 15 LEDs. Which LED slot lights which button is not known. |
 | Wheel config byte 233 (RPM LED brightness) | Named in a table; never exercised. |
 | Force field of input report `0x01` | Position and sign are asserted, not derived from a descriptor. |
 

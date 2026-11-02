@@ -208,9 +208,9 @@ reliable in practice:
    through a power cycle. So the app sends nothing at all, not even the
    brightness, unless the attached wheel id (from
    [`0x23` byte 10](02-status-and-settings.md#get-0x23--live-base-status)) is
-   one whose mappings it knows: `4` (GTC) or `6` (GT Neo). The block is a GTC's;
-   on a GT Neo only the button mappings are the wheel's own, and its LED slots,
-   thresholds and patterns are the GTC's until they are worked out.
+   one whose mappings it knows: `4` (GTC) or `6` (GT Neo). Each is sent its own
+   block: the GTC's captured one, or the one SimPro was captured sending a GT
+   Neo, with the user's mappings, brightness and clutch bytes put in.
 5. **When a known wheel is first seen** — at start-up, and whenever one reappears
    after being another wheel or none — send the whole block with that wheel's
    mappings and the saved brightness: chunks 0, 1, 2, then 3. Sending a GT Neo

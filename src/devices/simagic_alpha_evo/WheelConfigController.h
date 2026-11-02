@@ -48,9 +48,11 @@ enum class WheelModel;
 /// software set on it, LEDs and all.
 ///
 /// **Each of those has its own button mappings**, kept apart and put into the
-/// block for the wheel on the base. Everything else in the block is the GTC's:
-/// only a GTC is offered its colours, triggers and RPM lights, and on a GT Neo
-/// the colours are kept and drawn but not sent.
+/// block for the wheel on the base. A GT Neo is sent its own block otherwise,
+/// as SimPro sent it (gtNeoWheelConfig()), so its LEDs and RPM lights are
+/// SimPro's defaults; a GTC is sent the GTC's. Only a GTC is offered its
+/// colours, triggers and RPM lights to change, and on a GT Neo the colours are
+/// kept and drawn but not sent.
 class WheelConfigController : public QObject
 {
     Q_OBJECT
@@ -221,9 +223,17 @@ private:
     /// makes the wheel apply them. See kWheelConfigApplyChunk.
     void push(quint8 chunks);
 
+    /// The block as the wheel on the base is sent it: m_config, but for a GT
+    /// Neo, its own block with m_config's mappings, brightness and clutch bytes.
+    WheelConfig outgoingBlock() const;
+
     AlphaEvoSettings *m_settings = nullptr;
     UsbDeviceInfo m_info;
     WheelConfig m_config;
+
+    /// What a GT Neo is sent, but for the parts outgoingBlock() takes from
+    /// m_config: SimPro's block for it, LEDs and RPM lights.
+    WheelConfig m_gtNeoBlock;
 
     /// What the user has picked, by wheel id and then control key. A GTC's
     /// picks are in m_config as well, which is what is drawn and sent.

@@ -90,6 +90,12 @@ QVector<QByteArray> composeLedRingReports(const LedRingColours &colours, quint8 
 /// another. See kDefaultWheelConfigWheelId.
 WheelConfig defaultWheelConfig();
 
+/// The block SIMAGIC SimPro Manager sent a GT Neo, as captured: its own LED
+/// slots, RPM thresholds and patterns, where the GTC's would light a GT Neo's
+/// fifteen RPM LEDs wrongly. What is sent to a GT Neo but its button mappings,
+/// brightness and clutch bytes, which are the user's.
+WheelConfig gtNeoWheelConfig();
+
 /// The wheel defaultWheelConfig() was captured from, by its wheel id: 4, the GTC, which is also what the base reported when this
 /// module ran against it. The parts of the block that depend on the model, such
 /// as the LED colours, are only sent while the base reports this wheel.

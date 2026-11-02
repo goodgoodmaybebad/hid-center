@@ -165,6 +165,7 @@ WheelConfigController::WheelConfigController(AlphaEvoSettings *settings, UsbDevi
     , m_settings(settings)
     , m_info(std::move(info))
     , m_config(defaultWheelConfig())
+    , m_gtNeoBlock(gtNeoWheelConfig())
 {
     QSettings store;
     bool valid = false;
@@ -631,11 +632,28 @@ void WheelConfigController::push(quint8 chunks)
     // In order, and always ending on the report that applies: the wheel takes
     // the others in without acting on them. Sent once, however many of the
     // others went before it.
+    const WheelConfig block = outgoingBlock();
     for (int chunk = 0; chunk < kWheelConfigApplyChunk; ++chunk) {
         if (chunks & (1u << chunk))
-            m_settings->writeWheelConfigAsync(m_config, chunk);
+            m_settings->writeWheelConfigAsync(block, chunk);
     }
-    m_settings->writeWheelConfigAsync(m_config, kWheelConfigApplyChunk);
+    m_settings->writeWheelConfigAsync(block, kWheelConfigApplyChunk);
+}
+
+WheelConfig WheelConfigController::outgoingBlock() const
+{
+    if (m_attachedWheelId != kGtNeoWheelId)
+        return m_config;
+
+    // A GT Neo's own LEDs and RPM lights, with what the user sets on every
+    // wheel put in.
+    WheelConfig block = m_gtNeoBlock;
+    for (int input = 0; input < kWheelConfigMappingCount; ++input)
+        block.setButtonMapping(input, m_config.buttonMapping(input));
+    block.setLedBrightness(m_config.ledBrightness());
+    block.setClutchSynced(m_config.clutchSynced());
+    block.setClutchRatio(m_config.clutchRatio());
+    return block;
 }
 
 void WheelConfigController::save()

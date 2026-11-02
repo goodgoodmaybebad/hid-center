@@ -55,9 +55,8 @@ you explore the pages with no hardware connected.
 ## Limitations
 
 - Only the GTC and GT Neo are written to, and nothing at all is sent to any other
-  wheel. On a GT Neo only the button mappings, brightness and clutch settings
-  are its own: its LEDs and shift lights get the GTC's, unless the wheel is
-  left to SimPro.
+  wheel. A GT Neo's LEDs and shift lights are sent as SimPro sent them once, and
+  cannot be changed here yet; leave the wheel to SimPro to keep your own.
 - The wheel's configuration and the LED ring cannot be read back from the hardware.
   The plugin remembers what it sent and re-sends the ring colours every few seconds.
 - Parts of the protocol are inferred from captures. The
