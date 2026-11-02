@@ -7,6 +7,7 @@
 #include "AlphaEvoPedals.h"
 #include "BasePedalController.h"
 #include "PedalCalibrationDialog.h"
+#include "PedalCurveEditor.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -137,6 +138,8 @@ void PedalsPage::showPedals()
     m_brakeRaw->setText(known ? tr("%1 / %2").arg(m_input->brakeRaw(), 5)
                                     .arg(m_input->brakeRawMax())
                               : QString());
+    m_brake.editor->setOutput(known ? m_input->brake() : -1.0);
+    m_throttle.editor->setOutput(known ? m_input->throttle() : -1.0);
 }
 
 void PedalsPage::showStatus()
@@ -192,22 +195,21 @@ QGroupBox *PedalsPage::makeSettingsBox()
     warning->setEnabled(false);
     layout->addWidget(warning);
 
-    auto *form = new QFormLayout;
-    layout->addLayout(form);
+    // Side by side, as SimPro has them.
+    auto *panels = new QHBoxLayout;
+    layout->addLayout(panels);
 
     m_brake.group = kPedalBrakeGroup;
     m_throttle.group = kPedalThrottleGroup;
 
-    form->addRow(new QLabel(tr("<b>Brake</b>"), box));
     m_brakeSensor = new QComboBox(box);
     m_brakeSensor->setObjectName(QStringLiteral("brakeSensor"));
     m_brakeSensor->addItem(tr("Load cell"), int(PedalBrakeSensor::LoadCell));
     m_brakeSensor->addItem(tr("Angle sensor"), int(PedalBrakeSensor::Angle));
-    form->addRow(tr("&Sensor"), m_brakeSensor);
-    addPedalRows(m_brake, QStringLiteral("brake"), form, box);
-
-    form->addRow(new QLabel(tr("<b>Throttle</b>"), box));
-    addPedalRows(m_throttle, QStringLiteral("throttle"), form, box);
+    panels->addWidget(
+        makePedalPanel(m_brake, tr("Brake"), QStringLiteral("brake"), m_brakeSensor, box));
+    panels->addWidget(
+        makePedalPanel(m_throttle, tr("Throttle"), QStringLiteral("throttle"), nullptr, box));
 
     auto *calibrateRow = new QHBoxLayout;
     m_calibrate = new QPushButton(tr("Ca&librate pedals…"), box);
@@ -258,40 +260,59 @@ QGroupBox *PedalsPage::makeSettingsBox()
     return box;
 }
 
-void PedalsPage::addPedalRows(PedalControls &controls, const QString &name, QFormLayout *form,
-                              QWidget *parent)
+QGroupBox *PedalsPage::makePedalPanel(PedalControls &controls, const QString &title,
+                                      const QString &name, QWidget *extra, QWidget *parent)
 {
-    controls.curve = new QComboBox(parent);
+    auto *panel = new QGroupBox(title, parent);
+    panel->setObjectName(name + QStringLiteral("Panel"));
+    auto *layout = new QVBoxLayout(panel);
+
+    // The curve's choice above the graph, as SimPro's icons are, with what the
+    // pedal has beside it: the brake's sensor.
+    auto *top = new QHBoxLayout;
+    controls.curve = new QComboBox(panel);
     controls.curve->setObjectName(name + QStringLiteral("Curve"));
     controls.curve->addItem(tr("Linear"));
-    controls.curve->addItem(tr("Soft start (10 / 30 / 60 %)"));
-    controls.curve->addItem(tr("Strong start (40 / 70 / 90 %)"));
-    controls.curve->addItem(tr("S-shaped (10 / 50 / 90 %)"));
+    controls.curve->addItem(tr("Soft start"));
+    controls.curve->addItem(tr("Strong start"));
+    controls.curve->addItem(tr("S-shaped"));
     controls.curve->setPlaceholderText(tr("Custom"));
-    controls.curve->setToolTip(tr("SimPro's four curves, in its order. Changing a point below "
-                                  "makes the curve a custom one."));
-    form->addRow(tr("Curve"), controls.curve);
+    controls.curve->setToolTip(tr("SimPro's four curves, in its order. Dragging a dot, or "
+                                  "changing a point below, makes the curve a custom one."));
+    top->addWidget(controls.curve, 1);
+    if (extra)
+        top->addWidget(extra);
+    layout->addLayout(top);
 
-    // How much the pedal gives a quarter, half and three quarters of the way in.
+    controls.editor = new PedalCurveEditor(panel);
+    controls.editor->setObjectName(name + QStringLiteral("CurveEditor"));
+    controls.editor->setToolTip(
+        tr("Drag a dot up or down for how much the pedal gives a quarter, half and three "
+           "quarters of the way in, and the handles below for the part of its travel it uses."));
+    layout->addWidget(controls.editor, 1);
+
+    // Exact values, beneath the graph they also set.
+    auto *form = new QFormLayout;
     auto *points = new QHBoxLayout;
-    static const char *const kAt[] = {"25", "50", "75"};
     for (std::size_t i = 0; i < controls.points.size(); ++i) {
-        points->addWidget(new QLabel(tr("at %1 %:").arg(QLatin1String(kAt[i])), parent));
         controls.points[i] =
-            makePercentBox(name + QStringLiteral("Point%1").arg(i + 1), 0, 100, parent);
+            makePercentBox(name + QStringLiteral("Point%1").arg(i + 1), 0, 100, panel);
         points->addWidget(controls.points[i]);
     }
     points->addStretch(1);
-    form->addRow(tr("Output"), points);
+    form->addRow(tr("At 25 / 50 / 75 %"), points);
 
     auto *range = new QHBoxLayout;
-    controls.rangeStart = makePercentBox(name + QStringLiteral("RangeStart"), 0, 99, parent);
-    controls.rangeEnd = makePercentBox(name + QStringLiteral("RangeEnd"), 1, 100, parent);
+    controls.rangeStart = makePercentBox(name + QStringLiteral("RangeStart"), 0, 99, panel);
+    controls.rangeEnd = makePercentBox(name + QStringLiteral("RangeEnd"), 1, 100, panel);
     range->addWidget(controls.rangeStart);
-    range->addWidget(new QLabel(tr("to"), parent));
+    range->addWidget(new QLabel(tr("to"), panel));
     range->addWidget(controls.rangeEnd);
     range->addStretch(1);
     form->addRow(tr("Range"), range);
+    layout->addLayout(form);
+
+    return panel;
 }
 
 void PedalsPage::connectPedal(const PedalControls &controls)
@@ -319,6 +340,15 @@ void PedalsPage::connectPedal(const PedalControls &controls)
     };
     connect(controls.rangeStart, &QSpinBox::valueChanged, this, setRange);
     connect(controls.rangeEnd, &QSpinBox::valueChanged, this, setRange);
+
+    // A drag on the graph: both at once, the range first, so the points are
+    // set against the range they were dragged on.
+    connect(controls.editor, &PedalCurveEditor::edited, this, [this, controls] {
+        const PedalCurveEditor *editor = controls.editor;
+        m_pedals->setRange(controls.group, editor->rangeStart(), editor->rangeEnd());
+        m_pedals->setCurvePoints(controls.group, editor->points());
+        showSettings();
+    });
 }
 
 void PedalsPage::showSettings()
@@ -355,6 +385,9 @@ void PedalsPage::showSettings()
                     pedal->points[i]->setValue(points[i]);
                 pedal->rangeStart->setValue(m_pedals->rangeStartOf(pedal->group));
                 pedal->rangeEnd->setValue(m_pedals->rangeEndOf(pedal->group));
+                pedal->editor->setRange(m_pedals->rangeStartOf(pedal->group),
+                                        m_pedals->rangeEndOf(pedal->group));
+                pedal->editor->setPoints(points);
             }
         }
     }
@@ -362,6 +395,10 @@ void PedalsPage::showSettings()
     m_settingsEnabled->setEnabled(known && !calibrating);
     for (QWidget *control : controls)
         control->setEnabled(enabled && !calibrating);
+    // Not disabled, only not draggable: the live position is worth seeing
+    // whether or not the settings may be changed.
+    for (const PedalControls *pedal : {&m_brake, &m_throttle})
+        pedal->editor->setEditable(enabled && !calibrating);
     m_calibrate->setEnabled(known && m_pedals->canCalibrate());
     if (!enabled)
         m_settingsStatus->clear();

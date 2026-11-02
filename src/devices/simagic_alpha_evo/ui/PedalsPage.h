@@ -21,6 +21,7 @@ namespace hidcenter::simagic_alpha_evo {
 
 class AlphaEvoButtonInput;
 class BasePedalController;
+class PedalCurveEditor;
 
 /// The *Pedals* tab: where pedals plugged into the base by CAN-Bus are, live,
 /// and their settings.
@@ -50,11 +51,13 @@ protected:
     void hideEvent(QHideEvent *event) override;
 
 private:
-    /// One pedal's settings controls.
+    /// One pedal's settings controls: the graph to drag, and boxes for exact
+    /// values beneath it.
     struct PedalControls
     {
         int group = 0;
         QComboBox *curve = nullptr;
+        PedalCurveEditor *editor = nullptr;
         std::array<QSpinBox *, 3> points{};
         QSpinBox *rangeStart = nullptr;
         QSpinBox *rangeEnd = nullptr;
@@ -66,10 +69,10 @@ private:
     /// The settings box: build it, fill it from the controller, and enable
     /// what may be changed.
     QGroupBox *makeSettingsBox();
-    /// A pedal's curve, its points and its range, as rows of `form`. `name`
-    /// starts each control's object name.
-    void addPedalRows(PedalControls &controls, const QString &name, QFormLayout *form,
-                      QWidget *parent);
+    /// A pedal's panel: `extra` first, if any, then its curve, the graph, its
+    /// points and its range. `name` starts each control's object name.
+    QGroupBox *makePedalPanel(PedalControls &controls, const QString &title,
+                              const QString &name, QWidget *extra, QWidget *parent);
     void connectPedal(const PedalControls &controls);
     void showSettings();
     void openCalibration();
