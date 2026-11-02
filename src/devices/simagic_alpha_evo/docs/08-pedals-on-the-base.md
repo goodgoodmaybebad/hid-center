@@ -128,8 +128,20 @@ numbers look like positions in SimPro's own curve editor, y down, rather than
 percentages. The range ends' scale, 6 to 302, is the same sort of thing; where
 exactly 10 % and 90 % fall on it is not pinned, since the slider was dragged.
 
-What the other groups are is not known. Changing the display unit, % or kg,
-sent nothing new: it is SimPro's alone.
+**Group 2 is the throttle's**, from `throttle-curves.pcapng`, in which SimPro's
+throttle curve was stepped through its presets and nothing else moved. Its curve
+points went through the same four values as the brake's, so the presets are the
+same for both. Its range end stayed at 257, which on the brake's scale is 85 %;
+whether the throttle's range uses the same scale is not confirmed. Before the
+capture it was on a custom curve, `340, 270, 156`.
+
+Group 0 is linear over its whole range in every capture, as an unused clutch
+would be on a set without one. Group 3, `6, 205, 270, 335, 302`, never moved.
+
+The same capture has the brake's range start at 44, 13 %, where the two before
+had 6.
+
+Changing the display unit, % or kg, sent nothing new: it is SimPro's alone.
 
 ### Every settings change is the same update
 
