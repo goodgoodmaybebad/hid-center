@@ -9,6 +9,11 @@ Everything here is from one capture, `pedal-calibration.pcapng`: SIMAGIC SimPro
 Manager calibrating a two-pedal P1000 (throttle and brake) on an Alpha Evo. **No
 part of it is implemented**, and none of it has been sent by this app.
 
+What SimPro had the brake set to throughout, by its owner: **load cell** mode
+(the other is angle, the second sensor), shown in **%** (the other is kg), a
+**linear** curve (one of four), and the whole range, **0 % to 100 %**. Nothing
+was changed but the calibration, so no byte below is tied to any of these yet.
+
 ## The pass-through
 
 `SET_FEATURE(report 0x80)`, 64 bytes, sub-command **`0x1d`**, zero-padded:
@@ -92,6 +97,16 @@ Ten 16-bit little-endian numbers in four groups of five:
 One group per sensor, in the order of `f1 20`'s pairs, would fit. What the
 numbers mean is not known: a capture of SimPro changing one pedal setting at a
 time would tell.
+
+### `f1 1b`
+
+```
+04 ff 68 00 64 04 | 04 ff 00 00 64 04
+```
+
+Two groups of six would fit one per pedal. `0x64` is 100 in both, which would
+fit a range ending at 100 %, and the second group's `00 00` one starting at 0 %.
+Neither is confirmed.
 
 ## Raw readings during calibration
 
