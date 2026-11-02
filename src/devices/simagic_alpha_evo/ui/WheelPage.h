@@ -35,11 +35,10 @@ enum class WheelModel;
 /// A picture, and beside the picture a column for the wheel as a whole: its LEDs,
 /// its clutch paddles, if it has any, and which of its buttons are pressed. The wheel is the one the base reports.
 /// With none on the base, or one this module has no released layout for, the page
-/// says so instead. A developer also gets a picker, to look at any wheel by hand
-/// and at the GT Neo, which is not released.
+/// says so instead. A developer also gets a picker, to look at any wheel by hand.
 /// The wheel's controls can be pointed at. Clicking a button opens a window of
-/// its settings. On a GTC, so does clicking the RPM lights, an encoder or a
-/// 7-way switch.
+/// its settings, and so does clicking an encoder or a 7-way switch. On a GTC, so
+/// does clicking the RPM lights.
 ///
 /// **The page only edits.** The brightness, the buttons' settings and the RPM
 /// lights belong to WheelConfigController, which sends them to the wheel and

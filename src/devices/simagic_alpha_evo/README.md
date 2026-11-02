@@ -25,7 +25,8 @@ The plugin adds five tabs to the device page.
 - **Wheelbase LED**: sets the colours of the LED ring on the base. There are
   separate modes for idle, ABS, traction control and other events, and they
   switch automatically from telemetry.
-- **Wheel**: configures the attached steering wheel, currently the GTC:
+- **Wheel**: configures the attached steering wheel. On a GT Neo, only which
+  joystick button each input presses. On a GTC:
   - which joystick button each input presses
   - the colour and trigger of each lit button
   - the RPM shift-light patterns and thresholds
@@ -47,7 +48,9 @@ you explore the pages with no hardware connected.
 
 ## Limitations
 
-- Only the GTC wheel's own configuration is written.
+- Only the GTC and GT Neo are written to, and nothing at all is sent to any other
+  wheel. On a GT Neo only the button mappings are its own: its LEDs, shift
+  lights and clutch settings get the GTC's.
 - The wheel's configuration and the LED ring cannot be read back from the hardware.
   The plugin remembers what it sent and re-sends the ring colours every few seconds.
 - Parts of the protocol are inferred from captures. The

@@ -15,7 +15,6 @@
 #include "LedModeStore.h"
 #include "WheelButtonColours.h"
 #include "WheelLedTriggers.h"
-#include "core/Logging.h"
 #include "ui/WheelLayouts.h"
 
 namespace hidcenter::simagic_alpha_evo {
@@ -52,17 +51,6 @@ QString clutchSyncedSettingsPath(const UsbDeviceInfo &info)
 QString clutchRatioSettingsPath(const UsbDeviceInfo &info)
 {
     return QStringLiteral("devices/%1/wheelClutchRatio").arg(ledSettingsKey(info));
-}
-
-/// The GT Neo, as its base reports it (byte 10 of 0x23, seen on hardware).
-constexpr int kGtNeoWheelId = 6;
-
-/// Opt-in, for a GT Neo whose button mappings were lost: send it the whole
-/// default block, with every input pressing a button of its own. Its block's
-/// layout is not known, so this is never done unasked.
-bool gtNeoRestoreRequested()
-{
-    return qEnvironmentVariableIntValue("HIDCENTER_GTNEO_RESTORE") == 1;
 }
 
 /// One group per wheel, by its wheel id, holding a colour name per control key.
@@ -226,22 +214,8 @@ WheelConfigController::WheelConfigController(AlphaEvoSettings *settings, UsbDevi
                             triggers.value(control.key, stockTrigger));
         }
 
-        // A mapping never set is what the block has, the default.
-        store.beginGroup(mappingSettingsGroup(m_info, gtc->wheelId));
-        for (const WheelControl &control : gtc->controls) {
-            for (qsizetype action = 0; action < control.inputs.size(); ++action) {
-                bool valid = false;
-                const int button =
-                    store.value(mappingSettingsKey(control, int(action))).toInt(&valid);
-                const int input = control.inputs.at(action);
-                if (input >= 0 && valid && button >= 1 && button <= kWheelButtonMax)
-                    m_config.setButtonMapping(input, button);
-            }
-        }
-        store.endGroup();
-
-        // So are RPM lights never set. A row that cannot be read is left as
-        // the block has it rather than dropping the rest.
+        // RPM lights never set are what the block has. A row that cannot be
+        // read is left as the block has it rather than dropping the rest.
         const int leds = rpmLedCount(*gtc);
         RpmLights lights = readRpmLights(m_config, leds);
         store.beginGroup(rpmLightsSettingsGroup(m_info, gtc->wheelId));
@@ -254,6 +228,35 @@ WheelConfigController::WheelConfigController(AlphaEvoSettings *settings, UsbDevi
         store.endGroup();
         writeRpmLights(m_config, lights, leds);
     }
+
+    // Each wheel whose mappings are known has its own, from its default and
+    // then what the user set. A GTC's default is the block's; any other's is
+    // every input on the button one above its number, which on a GT Neo gives
+    // each control a button of its own.
+    for (const WheelLayout &layout : wheelLayouts()) {
+        if (!wheelMappingsKnown(layout.wheelId))
+            continue;
+        ButtonMappings &mappings = m_mappings[layout.wheelId];
+        for (int input = 0; input < kWheelConfigMappingCount; ++input) {
+            mappings[std::size_t(input)] = layout.wheelId == kDefaultWheelConfigWheelId
+                                               ? m_config.buttonMapping(input)
+                                               : input + 1;
+        }
+
+        store.beginGroup(mappingSettingsGroup(m_info, layout.wheelId));
+        for (const WheelControl &control : layout.controls) {
+            for (qsizetype action = 0; action < control.inputs.size(); ++action) {
+                bool valid = false;
+                const int button =
+                    store.value(mappingSettingsKey(control, int(action))).toInt(&valid);
+                const int input = control.inputs.at(action);
+                if (input >= 0 && valid && button >= 1 && button <= kWheelButtonMax)
+                    mappings[std::size_t(input)] = button;
+            }
+        }
+        store.endGroup();
+    }
+    putMappingsInBlock();
 
     m_throttle = new QTimer(this);
     m_throttle->setSingleShot(true);
@@ -398,7 +401,7 @@ std::optional<int> WheelConfigController::controlButton(WheelModel model, const 
     const int input = controlInput(model, key, action);
     if (input < 0)
         return std::nullopt;
-    return m_config.buttonMapping(input);
+    return m_mappings.value(wheelLayout(model).wheelId)[std::size_t(input)];
 }
 
 void WheelConfigController::setControlButton(WheelModel model, const QString &key, int action,
@@ -408,13 +411,20 @@ void WheelConfigController::setControlButton(WheelModel model, const QString &ke
     if (input < 0 || button < 1 || button > kWheelButtonMax)
         return;
 
-    const WheelConfig before = m_config;
-    m_config.setButtonMapping(input, button);
-    if (m_config == before)
+    const int wheelId = wheelLayout(model).wheelId;
+    int &mapping = m_mappings[wheelId][std::size_t(input)];
+    if (mapping == button)
         return;
-
+    mapping = button;
     m_mappingsChanged = true;
     m_saveTimer->start();
+
+    // Only the block's own wheel's reaches it. Another's is kept for when that
+    // wheel is on the base.
+    if (wheelId != mappingsWheelId())
+        return;
+    const WheelConfig before = m_config;
+    m_config.setButtonMapping(input, button);
     if (sendsWheelSettings())
         scheduleChanges(before);
 }
@@ -430,8 +440,10 @@ WheelConfigController::ButtonSharing WheelConfigController::buttonSharing(WheelM
         return sharing;
 
     const WheelLayout &layout = wheelLayout(model);
+    const ButtonMappings mappings = m_mappings.value(layout.wheelId);
     for (int input = 0; input < kWheelConfigMappingCount; ++input) {
-        if (input == asked || !isGtcButtonInput(input) || m_config.buttonMapping(input) != button)
+        if (input == asked || !wheelUsesInput(layout.wheelId, input)
+            || mappings[std::size_t(input)] != button)
             continue;
 
         bool placed = false;
@@ -480,8 +492,7 @@ bool WheelConfigController::sendsWheelSettings() const
 {
     if (!m_settings)
         return false;
-    return m_settings->isOffline() || m_attachedWheelId == kDefaultWheelConfigWheelId
-           || (m_attachedWheelId == kGtNeoWheelId && gtNeoRestoreRequested());
+    return m_settings->isOffline() || wheelMappingsKnown(m_attachedWheelId);
 }
 
 const WheelControl *WheelConfigController::blockControl(WheelModel model, const QString &key) const
@@ -490,10 +501,29 @@ const WheelControl *WheelConfigController::blockControl(WheelModel model, const 
     return layout.wheelId == kDefaultWheelConfigWheelId ? findControl(layout, key) : nullptr;
 }
 
+const WheelControl *WheelConfigController::mappedControl(WheelModel model,
+                                                         const QString &key) const
+{
+    const WheelLayout &layout = wheelLayout(model);
+    return wheelMappingsKnown(layout.wheelId) ? findControl(layout, key) : nullptr;
+}
+
 int WheelConfigController::controlInput(WheelModel model, const QString &key, int action) const
 {
-    const WheelControl *control = blockControl(model, key);
+    const WheelControl *control = mappedControl(model, key);
     return control ? control->inputs.value(action, -1) : -1;
+}
+
+int WheelConfigController::mappingsWheelId() const
+{
+    return wheelMappingsKnown(m_attachedWheelId) ? m_attachedWheelId : kDefaultWheelConfigWheelId;
+}
+
+void WheelConfigController::putMappingsInBlock()
+{
+    const ButtonMappings mappings = m_mappings.value(mappingsWheelId());
+    for (int input = 0; input < kWheelConfigMappingCount; ++input)
+        m_config.setButtonMapping(input, mappings[std::size_t(input)]);
 }
 
 void WheelConfigController::refreshAttachedWheel()
@@ -505,21 +535,15 @@ void WheelConfigController::refreshAttachedWheel()
 
     m_attachedWheelKnown = true;
     m_attachedWheelId = wheelId;
+    putMappingsInBlock();
     Q_EMIT attachedWheelChanged();
 
-    // Everything a GTC is set to at start-up, with the brightness held since
-    // construction, and again whenever a GTC comes back onto the base, which may
-    // have been set by something else in the meantime: the buttons and the RPM
-    // thresholds in report 0, the RPM patterns in 1 and 2, so the whole block.
-    // The first call sends the brightness even when there is nothing else to
-    // send.
-    if (wheelId == kGtNeoWheelId && gtNeoRestoreRequested()) {
-        qCWarning(hidcenterDevice)
-            << "HIDCENTER_GTNEO_RESTORE: sending a GT Neo the default block, every input"
-               " pressing the button one above its number";
-        for (int input = 0; input < kWheelConfigMappingCount; ++input)
-            m_config.setButtonMapping(input, input + 1);
-    }
+    // Everything a known wheel is set to at start-up, with the brightness held
+    // since construction, and again whenever one comes back onto the base, which
+    // may have been set by something else in the meantime: the buttons and the
+    // RPM thresholds in report 0, the RPM patterns in 1 and 2, so the whole
+    // block. Never only the brightness: report 3 applies the other three as the
+    // wheel holds them, and on a GT Neo that once left every input on button 1.
     if (sendsWheelSettings()) {
         for (int chunk = 0; chunk < kWheelConfigApplyChunk; ++chunk)
             m_pendingChunks |= quint8(1u << chunk);
@@ -543,7 +567,7 @@ void WheelConfigController::flushPending()
     // Not even the brightness goes to a wheel whose block is not known. Chunk 3
     // is what makes a wheel apply the block, and sent alone to a GT Neo it left
     // every input pressing button 1. Held, not dropped: it goes out with the
-    // rest if a GTC is attached later.
+    // rest if a known wheel is attached later.
     if (!m_pendingChunks || !sendsWheelSettings())
         return;
 
@@ -604,18 +628,23 @@ void WheelConfigController::save()
         store.endGroup();
     }
 
-    if (std::exchange(m_mappingsChanged, false) && gtc) {
-        store.beginGroup(mappingSettingsGroup(m_info, gtc->wheelId));
-        for (const WheelControl &control : gtc->controls) {
-            for (qsizetype action = 0; action < control.inputs.size(); ++action) {
-                const int input = control.inputs.at(action);
-                if (input >= 0) {
-                    store.setValue(mappingSettingsKey(control, int(action)),
-                                   m_config.buttonMapping(input));
+    if (std::exchange(m_mappingsChanged, false)) {
+        for (const WheelLayout &layout : wheelLayouts()) {
+            const auto mappings = m_mappings.constFind(layout.wheelId);
+            if (mappings == m_mappings.cend())
+                continue;
+            store.beginGroup(mappingSettingsGroup(m_info, layout.wheelId));
+            for (const WheelControl &control : layout.controls) {
+                for (qsizetype action = 0; action < control.inputs.size(); ++action) {
+                    const int input = control.inputs.at(action);
+                    if (input >= 0) {
+                        store.setValue(mappingSettingsKey(control, int(action)),
+                                       (*mappings)[std::size_t(input)]);
+                    }
                 }
             }
+            store.endGroup();
         }
-        store.endGroup();
     }
 
     if (std::exchange(m_rpmLightsChanged, false) && gtc) {

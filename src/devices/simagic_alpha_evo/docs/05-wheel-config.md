@@ -62,6 +62,13 @@ encoders; the shift paddles are inputs `12` and `13` (buttons 13 and 14). The
 clutch paddles are axes and have no mapping. The default mapping gives input `N`
 the button `N + 1`.
 
+For a GT Neo (wheel id 6), every input presses a button except `23` and `26`:
+10 buttons, two 7-way switches, two thumb rollers and four rotary knobs, and the
+shift paddles are inputs `13` (left) and `12` (right). Found on a real wheel by
+sending it a block that mapped every input `N` to button `N + 1`, which is the
+default the app gives it, and trying each control. The two 7-way switches use
+the same inputs as a GTC's. The clutch paddles are axes.
+
 Two inputs mapped to the same joystick button press the same button; the app
 warns about that but does not forbid it.
 
@@ -169,8 +176,8 @@ The wheel says the ratio back in the joystick report (byte 38, as received) as
 soon as chunk 3 arrives, which is a way to see that a write reached it. The mode
 is not said back anywhere that has been found.
 
-Both go to every wheel, as the brightness does: they are in chunk 3, which is
-always sent.
+Both go wherever the brightness does: they are in chunk 3, which ends every
+update.
 
 ## Sending rules
 
@@ -190,13 +197,19 @@ reliable in practice:
    meanwhile goes out as one update carrying the latest values. (The timer must be
    a precise one: a coarse timer fired up to 5 % early, at 475 ms, in a 500 ms
    test.)
-4. **Only for a GTC.** The block is a GTC's, and its mappings, thresholds and LED
-   slots mean something else on other wheels. The app only sends chunks 0–2 when
-   the attached wheel id (from [`0x23` byte 10](02-status-and-settings.md#get-0x23--live-base-status))
-   is `4`. Chunk 3 — the brightness and the clutch paddles — is sent regardless.
-5. **At start-up** send the saved brightness at once (chunk 3). When the wheel id is
-   first learned to be a GTC — and whenever a GTC reappears after being another
-   wheel or none — send the whole block: chunks 0, 1, 2, then 3.
+4. **Only for a known wheel, and never chunk 3 alone.** Chunk 3 applies chunks
+   0–2 *as the wheel holds them*. Sent alone to a GT Neo that had not been sent
+   the others, it left every input pressing button 1, and the wheel kept that
+   through a power cycle. So the app sends nothing at all, not even the
+   brightness, unless the attached wheel id (from
+   [`0x23` byte 10](02-status-and-settings.md#get-0x23--live-base-status)) is
+   one whose mappings it knows: `4` (GTC) or `6` (GT Neo). The block is a GTC's;
+   on a GT Neo only the button mappings are the wheel's own, and its LED slots,
+   thresholds and patterns are the GTC's until they are worked out.
+5. **When a known wheel is first seen** — at start-up, and whenever one reappears
+   after being another wheel or none — send the whole block with that wheel's
+   mappings and the saved brightness: chunks 0, 1, 2, then 3. Sending a GT Neo
+   this block is what restored its buttons.
 
 ## Worked example
 

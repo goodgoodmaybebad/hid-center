@@ -9,6 +9,7 @@
 #include <QObject>
 #include <QString>
 
+#include <array>
 #include <optional>
 
 #include "AlphaEvoWheelConfig.h"
@@ -35,13 +36,18 @@ enum class WheelModel;
 /// app agree is for the app to say it: once when the base is detected, whether
 /// or not the tab is ever opened, and again on every change.
 ///
-/// **Only the brightness and the clutch paddles go to every wheel.** The block
-/// this module sends around what it sets is a GTC's (see defaultWheelConfig()),
-/// and which byte means what differs from wheel to wheel. So everything else is
-/// sent only while the base reports a GTC. For any other wheel the colours are
-/// kept and drawn but not sent, and the rest is not offered at all. The
-/// brightness and the clutch bytes are in the last report, which goes to every
-/// wheel, since it is the one that applies the block.
+/// **Nothing goes to a wheel this module does not know.** The block it sends
+/// around what it sets is a GTC's (see defaultWheelConfig()), and which byte
+/// means what differs from wheel to wheel. The last report, which holds the
+/// brightness and the clutch bytes, makes the wheel apply the other three as it
+/// holds them, and sent alone to a GT Neo it left every input on button 1. So
+/// the block, whole, goes only to a wheel whose button mappings are known:
+/// wheelMappingsKnown(), a GTC or a GT Neo.
+///
+/// **Each of those has its own button mappings**, kept apart and put into the
+/// block for the wheel on the base. Everything else in the block is the GTC's:
+/// only a GTC is offered its colours, triggers and RPM lights, and on a GT Neo
+/// the colours are kept and drawn but not sent.
 class WheelConfigController : public QObject
 {
     Q_OBJECT
@@ -100,13 +106,15 @@ public:
     void setControlTrigger(WheelModel model, const QString &key, int trigger);
 
     /// The joystick button one action of a control presses, from 1: `action` is
-    /// an index into wheelControlActions(), 0 for a button. Only for a GTC
-    /// control whose input for that action is known, and nothing for any other.
+    /// an index into wheelControlActions(), 0 for a button. Only for a control
+    /// of a wheel whose mappings are known (wheelMappingsKnown()) and whose input
+    /// for that action is known, and nothing for any other.
     std::optional<int> controlButton(WheelModel model, const QString &key, int action) const;
 
     /// Make one action of a control press joystick button `button`, 1 to
     /// kWheelButtonMax, and keep it. Ignored for an action controlButton() has
-    /// nothing for, or a button out of that range. Sent as the colours are.
+    /// nothing for, or a button out of that range. Sent as the colours are while
+    /// that wheel is on the base, and kept for when it is otherwise.
     void setControlButton(WheelModel model, const QString &key, int action, int button);
 
     /// One action of one of the layout's controls.
@@ -123,13 +131,13 @@ public:
         QList<SharedAction> controls;
 
         /// How many of the wheel's inputs with no control in the layout press
-        /// it: on a GTC, the shift paddles, which the layout gives no input.
+        /// it: the shift paddles, which no layout gives an input.
         int otherInputs = 0;
 
         bool isEmpty() const { return controls.isEmpty() && otherInputs == 0; }
     };
 
-    /// Every input of a GTC but the one of control `key`'s `action` that presses
+    /// Every input of the wheel but the one of control `key`'s `action` that presses
     /// `button`, as the block has them now, the same control's other actions
     /// included. Empty for an action controlButton() has nothing for.
     ButtonSharing buttonSharing(WheelModel model, const QString &key, int action,
@@ -148,15 +156,16 @@ public:
     /// The wheel id the base last reported, 0 for none or before it has said.
     int attachedWheelId() const { return m_attachedWheelId; }
 
-    /// Whether a change to a GTC's settings, everything but the brightness,
-    /// reaches the wheel now: while the base reports one, or offline, where it
-    /// is logged instead of sent.
+    /// Whether a change to the block reaches the wheel now: while the base
+    /// reports a wheel whose mappings are known, or offline, where it is logged
+    /// instead of sent.
     bool sendsWheelSettings() const;
 
 public Q_SLOTS:
-    /// Look at which wheel the base reports, and when that has changed, say so
-    /// and send a GTC its colours. Called on every base status refresh, and once
-    /// by the device after the probe, which fills in the status without saying.
+    /// Look at which wheel the base reports, and when that has changed, say so,
+    /// put its mappings in the block and, for a known wheel, send it the block.
+    /// Called on every base status refresh, and once by the device after the
+    /// probe, which fills in the status without saying.
     void refreshAttachedWheel();
 
 Q_SIGNALS:
@@ -172,9 +181,20 @@ private:
     /// laid out for. Null for another wheel, or a key it does not have.
     const WheelControl *blockControl(WheelModel model, const QString &key) const;
 
-    /// The wheel input of one of a blockControl()'s actions, or -1 when there is
+    /// A control of a model's wheel, when that wheel's mappings are known. Null
+    /// for another wheel, or a key it does not have.
+    const WheelControl *mappedControl(WheelModel model, const QString &key) const;
+
+    /// The wheel input of one of a mappedControl()'s actions, or -1 when there is
     /// no such control, action, or known input.
     int controlInput(WheelModel model, const QString &key, int action) const;
+
+    /// The wheel whose mappings are in the block: the one on the base if its
+    /// mappings are known, and otherwise the GTC the block was captured from.
+    int mappingsWheelId() const;
+
+    /// Copy mappingsWheelId()'s mappings into the block.
+    void putMappingsInBlock();
 
     /// Mark every report where the block now differs from `before`, and send
     /// them now if the wheel has not been updated for the pacing interval, or
@@ -194,8 +214,15 @@ private:
     QHash<int, QHash<QString, QColor>> m_colours;
     bool m_coloursChanged = false;
 
-    /// A GTC's triggers, mappings and RPM lights are only in m_config. These
-    /// say they need saving.
+    /// The joystick button each input presses, from 1, by input.
+    using ButtonMappings = std::array<int, kWheelConfigMappingCount>;
+
+    /// Every known wheel's mappings, by wheel id. The block has a copy of
+    /// mappingsWheelId()'s.
+    QHash<int, ButtonMappings> m_mappings;
+
+    /// A GTC's triggers and RPM lights are only in m_config. These, and the
+    /// one for m_mappings, say they need saving.
     bool m_triggersChanged = false;
     bool m_mappingsChanged = false;
     bool m_rpmLightsChanged = false;
