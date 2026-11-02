@@ -15,6 +15,7 @@
 #include "LedModeStore.h"
 #include "WheelButtonColours.h"
 #include "WheelLedTriggers.h"
+#include "core/Logging.h"
 #include "ui/WheelLayouts.h"
 
 namespace hidcenter::simagic_alpha_evo {
@@ -51,6 +52,17 @@ QString clutchSyncedSettingsPath(const UsbDeviceInfo &info)
 QString clutchRatioSettingsPath(const UsbDeviceInfo &info)
 {
     return QStringLiteral("devices/%1/wheelClutchRatio").arg(ledSettingsKey(info));
+}
+
+/// The GT Neo, as its base reports it (byte 10 of 0x23, seen on hardware).
+constexpr int kGtNeoWheelId = 6;
+
+/// Opt-in, for a GT Neo whose button mappings were lost: send it the whole
+/// default block, with every input pressing a button of its own. Its block's
+/// layout is not known, so this is never done unasked.
+bool gtNeoRestoreRequested()
+{
+    return qEnvironmentVariableIntValue("HIDCENTER_GTNEO_RESTORE") == 1;
 }
 
 /// One group per wheel, by its wheel id, holding a colour name per control key.
@@ -468,7 +480,8 @@ bool WheelConfigController::sendsWheelSettings() const
 {
     if (!m_settings)
         return false;
-    return m_settings->isOffline() || m_attachedWheelId == kDefaultWheelConfigWheelId;
+    return m_settings->isOffline() || m_attachedWheelId == kDefaultWheelConfigWheelId
+           || (m_attachedWheelId == kGtNeoWheelId && gtNeoRestoreRequested());
 }
 
 const WheelControl *WheelConfigController::blockControl(WheelModel model, const QString &key) const
@@ -500,6 +513,13 @@ void WheelConfigController::refreshAttachedWheel()
     // thresholds in report 0, the RPM patterns in 1 and 2, so the whole block.
     // The first call sends the brightness even when there is nothing else to
     // send.
+    if (wheelId == kGtNeoWheelId && gtNeoRestoreRequested()) {
+        qCWarning(hidcenterDevice)
+            << "HIDCENTER_GTNEO_RESTORE: sending a GT Neo the default block, every input"
+               " pressing the button one above its number";
+        for (int input = 0; input < kWheelConfigMappingCount; ++input)
+            m_config.setButtonMapping(input, input + 1);
+    }
     if (sendsWheelSettings()) {
         for (int chunk = 0; chunk < kWheelConfigApplyChunk; ++chunk)
             m_pendingChunks |= quint8(1u << chunk);
@@ -520,6 +540,13 @@ void WheelConfigController::scheduleChanges(const WheelConfig &before)
 
 void WheelConfigController::flushPending()
 {
+    // Not even the brightness goes to a wheel whose block is not known. Chunk 3
+    // is what makes a wheel apply the block, and sent alone to a GT Neo it left
+    // every input pressing button 1. Held, not dropped: it goes out with the
+    // rest if a GTC is attached later.
+    if (!m_pendingChunks || !sendsWheelSettings())
+        return;
+
     const quint8 pending = std::exchange(m_pendingChunks, 0);
     if (!pending)
         return;
