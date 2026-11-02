@@ -225,12 +225,17 @@ WheelConfigController::WheelConfigController(AlphaEvoSettings *settings, UsbDevi
                             wheelColour > 0 ? wheelColour : m_config.ledColour(control.ledSlot),
                             triggers.value(control.key, stockTrigger));
         }
+    }
 
-        // RPM lights never set are what the block has. A row that cannot be
-        // read is left as the block has it rather than dropping the rest.
-        const int leds = rpmLedCount(*gtc);
-        RpmLights lights = readRpmLights(m_config, leds);
-        store.beginGroup(rpmLightsSettingsGroup(m_info, gtc->wheelId));
+    // RPM lights never set are what each wheel's block has. A row that cannot
+    // be read is left as the block has it rather than dropping the rest.
+    for (const WheelLayout &layout : wheelLayouts()) {
+        WheelConfig *block = rpmBlock(layout.wheelId);
+        const int leds = rpmLedCount(layout);
+        if (!block || leds == 0)
+            continue;
+        RpmLights lights = readRpmLights(*block, leds);
+        store.beginGroup(rpmLightsSettingsGroup(m_info, layout.wheelId));
         for (qsizetype row = 0; row < lights.size(); ++row) {
             const std::optional<RpmPattern> saved = rpmPatternFromSettingsValue(
                 store.value(QString::number(row + 1)).toString());
@@ -238,7 +243,7 @@ WheelConfigController::WheelConfigController(AlphaEvoSettings *settings, UsbDevi
                 lights[row] = *saved;
         }
         store.endGroup();
-        writeRpmLights(m_config, lights, leds);
+        writeRpmLights(*block, lights, leds);
     }
 
     // Each wheel whose mappings are known has its own, from its default and
@@ -338,11 +343,14 @@ QHash<QString, QColor> WheelConfigController::controlColours(WheelModel model) c
 {
     const WheelLayout &layout = wheelLayout(model);
     QHash<QString, QColor> colours = m_colours.value(layout.wheelId);
-    if (layout.wheelId != kDefaultWheelConfigWheelId)
+    const WheelConfig *rpm = rpmBlock(layout.wheelId);
+    if (!rpm)
         return colours;
 
+    // Only a GTC's buttons are known to the block; see blockControl().
+    const bool gtc = layout.wheelId == kDefaultWheelConfigWheelId;
     for (const WheelControl &control : layout.controls) {
-        if (control.ledSlot >= 0)
+        if (gtc && control.ledSlot >= 0)
             colours.insert(control.key, colourOfWheel(m_config.ledColour(control.ledSlot)));
 
         // The RPM LEDs as pattern 0 has them, the top of the range, which is
@@ -351,7 +359,7 @@ QHash<QString, QColor> WheelConfigController::controlColours(WheelModel model) c
             const qsizetype leds = qMin<qsizetype>(control.lights.size(), kWheelConfigRpmLedCount);
             for (qsizetype led = 0; led < leds; ++led) {
                 colours.insert(control.lights.at(led).key,
-                               colourOfWheel(m_config.rpmLedColour(int(led), 0)));
+                               colourOfWheel(rpm->rpmLedColour(int(led), 0)));
             }
         }
     }
@@ -476,28 +484,52 @@ WheelConfigController::ButtonSharing WheelConfigController::buttonSharing(WheelM
 std::optional<RpmLights> WheelConfigController::rpmLights(WheelModel model) const
 {
     const WheelLayout &layout = wheelLayout(model);
+    const WheelConfig *block = rpmBlock(layout.wheelId);
     const int leds = rpmLedCount(layout);
-    if (layout.wheelId != kDefaultWheelConfigWheelId || leds == 0)
+    if (!block || leds == 0)
         return std::nullopt;
-    return readRpmLights(m_config, leds);
+    return readRpmLights(*block, leds);
 }
 
 void WheelConfigController::setRpmLights(WheelModel model, const RpmLights &lights)
 {
     const WheelLayout &layout = wheelLayout(model);
+    WheelConfig *block = rpmBlock(layout.wheelId);
     const int leds = rpmLedCount(layout);
-    if (layout.wheelId != kDefaultWheelConfigWheelId || leds == 0)
+    if (!block || leds == 0)
         return;
 
-    const WheelConfig before = m_config;
-    writeRpmLights(m_config, lights, leds);
-    if (m_config == before)
+    const WheelConfig before = *block;
+    writeRpmLights(*block, lights, leds);
+    if (*block == before)
         return;
 
     m_rpmLightsChanged = true;
     m_saveTimer->start();
-    if (sendsWheelSettings())
-        scheduleChanges(before);
+    if (sendsBlockOf(layout.wheelId))
+        scheduleChanges(before, *block);
+}
+
+WheelConfig *WheelConfigController::rpmBlock(int wheelId)
+{
+    return const_cast<WheelConfig *>(std::as_const(*this).rpmBlock(wheelId));
+}
+
+const WheelConfig *WheelConfigController::rpmBlock(int wheelId) const
+{
+    if (wheelId == kDefaultWheelConfigWheelId)
+        return &m_config;
+    if (wheelId == kGtNeoWheelId)
+        return &m_gtNeoBlock;
+    return nullptr;
+}
+
+bool WheelConfigController::sendsBlockOf(int wheelId) const
+{
+    // A GT Neo's block goes out while one is on the base, and m_config while
+    // anything else is, offline included.
+    return sendsWheelSettings()
+           && (wheelId == kGtNeoWheelId) == (m_attachedWheelId == kGtNeoWheelId);
 }
 
 bool WheelConfigController::sendsWheelSettings() const
@@ -598,8 +630,13 @@ void WheelConfigController::refreshAttachedWheel()
 
 void WheelConfigController::scheduleChanges(const WheelConfig &before)
 {
+    scheduleChanges(before, m_config);
+}
+
+void WheelConfigController::scheduleChanges(const WheelConfig &before, const WheelConfig &after)
+{
     for (int offset = 0; offset < kWheelConfigSize; ++offset) {
-        if (before.bytes[std::size_t(offset)] != m_config.bytes[std::size_t(offset)])
+        if (before.bytes[std::size_t(offset)] != after.bytes[std::size_t(offset)])
             m_pendingChunks |= quint8(1u << wheelConfigChunkOf(offset));
     }
     if (!m_throttle->isActive())
@@ -708,12 +745,18 @@ void WheelConfigController::save()
         }
     }
 
-    if (std::exchange(m_rpmLightsChanged, false) && gtc) {
-        const RpmLights lights = readRpmLights(m_config, rpmLedCount(*gtc));
-        store.beginGroup(rpmLightsSettingsGroup(m_info, gtc->wheelId));
-        for (qsizetype row = 0; row < lights.size(); ++row)
-            store.setValue(QString::number(row + 1), rpmPatternSettingsValue(lights.at(row)));
-        store.endGroup();
+    if (std::exchange(m_rpmLightsChanged, false)) {
+        for (const WheelLayout &layout : wheelLayouts()) {
+            const WheelConfig *block = rpmBlock(layout.wheelId);
+            const int leds = rpmLedCount(layout);
+            if (!block || leds == 0)
+                continue;
+            const RpmLights lights = readRpmLights(*block, leds);
+            store.beginGroup(rpmLightsSettingsGroup(m_info, layout.wheelId));
+            for (qsizetype row = 0; row < lights.size(); ++row)
+                store.setValue(QString::number(row + 1), rpmPatternSettingsValue(lights.at(row)));
+            store.endGroup();
+        }
     }
 }
 

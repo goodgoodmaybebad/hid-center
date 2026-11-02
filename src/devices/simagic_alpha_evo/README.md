@@ -26,8 +26,8 @@ The plugin adds six tabs to the device page.
   separate modes for idle, ABS, traction control and other events, and they
   switch automatically from telemetry.
 - **Wheel**: configures the attached steering wheel. On a GT Neo, which
-  joystick button each input presses, the LED brightness and the clutch paddles.
-  On a GTC:
+  joystick button each input presses, the RPM shift lights, the LED brightness
+  and the clutch paddles. On a GTC:
   - which joystick button each input presses
   - the colour and trigger of each lit button
   - the RPM shift-light patterns and thresholds
@@ -55,8 +55,9 @@ you explore the pages with no hardware connected.
 ## Limitations
 
 - Only the GTC and GT Neo are written to, and nothing at all is sent to any other
-  wheel. A GT Neo's LEDs and shift lights are sent as SimPro sent them once, and
-  cannot be changed here yet; leave the wheel to SimPro to keep your own.
+  wheel. A GT Neo starts from the block SimPro was once captured sending it. Its
+  shift lights can be changed here, its button LEDs cannot; leave the wheel to
+  SimPro to keep what SimPro set.
 - The wheel's configuration and the LED ring cannot be read back from the hardware.
   The plugin remembers what it sent and re-sends the ring colours every few seconds.
 - Parts of the protocol are inferred from captures. The

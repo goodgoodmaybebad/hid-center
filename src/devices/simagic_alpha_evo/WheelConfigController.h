@@ -50,9 +50,9 @@ enum class WheelModel;
 /// **Each of those has its own button mappings**, kept apart and put into the
 /// block for the wheel on the base. A GT Neo is sent its own block otherwise,
 /// as SimPro sent it (gtNeoWheelConfig()), so its LEDs and RPM lights are
-/// SimPro's defaults; a GTC is sent the GTC's. Only a GTC is offered its
-/// colours, triggers and RPM lights to change, and on a GT Neo the colours are
-/// kept and drawn but not sent.
+/// SimPro's defaults; a GTC is sent the GTC's. Both have their RPM lights
+/// offered to change. Only a GTC has its button colours and triggers, and on a
+/// GT Neo the colours are kept and drawn but not sent.
 class WheelConfigController : public QObject
 {
     Q_OBJECT
@@ -148,14 +148,14 @@ public:
     ButtonSharing buttonSharing(WheelModel model, const QString &key, int action,
                                 int button) const;
 
-    /// A GTC's RPM lights as the block has them, lowest percentage first, with
-    /// as many LEDs as its layout draws. Nothing for any other wheel.
+    /// A GTC's or GT Neo's RPM lights as its block has them, lowest percentage
+    /// first, with as many LEDs as its layout draws. Nothing for any other wheel.
     std::optional<RpmLights> rpmLights(WheelModel model) const;
 
-    /// Set a GTC's RPM lights, and keep them. Each percentage is held to 0–100
-    /// and to no less than the one before, and LEDs past the layout's are
-    /// ignored, as is anything past the tenth pattern. Ignored for any other
-    /// wheel. Sent as the colours are.
+    /// Set a GTC's or GT Neo's RPM lights, and keep them. Each percentage is
+    /// held to 0–100 and to no less than the one before, and LEDs past the
+    /// layout's are ignored, as is anything past the tenth pattern. Ignored for
+    /// any other wheel. Sent as the colours are while that wheel is on the base.
     void setRpmLights(WheelModel model, const RpmLights &lights);
 
     /// The wheel id the base last reported, 0 for none or before it has said.
@@ -214,10 +214,23 @@ private:
     /// Copy mappingsWheelId()'s mappings into the block.
     void putMappingsInBlock();
 
+    /// The block a wheel's RPM lights are kept in: m_config for a GTC,
+    /// m_gtNeoBlock for a GT Neo. Null for any other wheel.
+    WheelConfig *rpmBlock(int wheelId);
+    const WheelConfig *rpmBlock(int wheelId) const;
+
+    /// Whether a change to rpmBlock(`wheelId`) reaches the wheel now: that
+    /// block is the one outgoingBlock() sends from, and something is sent.
+    bool sendsBlockOf(int wheelId) const;
+
     /// Mark every report where the block now differs from `before`, and send
     /// them now if the wheel has not been updated for the pacing interval, or
     /// else when that is over.
     void scheduleChanges(const WheelConfig &before);
+
+    /// The same for any block: every report where `after` differs from
+    /// `before`.
+    void scheduleChanges(const WheelConfig &before, const WheelConfig &after);
 
     /// Send the reports in `chunks`, a bit per report, followed by the one that
     /// makes the wheel apply them. See kWheelConfigApplyChunk.
