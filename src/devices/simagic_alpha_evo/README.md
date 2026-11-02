@@ -25,8 +25,9 @@ The plugin adds six tabs to the device page.
 - **Wheelbase LED**: sets the colours of the LED ring on the base. There are
   separate modes for idle, ABS, traction control and other events, and they
   switch automatically from telemetry.
-- **Wheel**: configures the attached steering wheel. On a GT Neo, only which
-  joystick button each input presses. On a GTC:
+- **Wheel**: configures the attached steering wheel. On a GT Neo, which
+  joystick button each input presses, the LED brightness and the clutch paddles.
+  On a GTC:
   - which joystick button each input presses
   - the colour and trigger of each lit button
   - the RPM shift-light patterns and thresholds
