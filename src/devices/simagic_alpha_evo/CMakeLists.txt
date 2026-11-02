@@ -60,6 +60,10 @@ hidcenter_add_device_plugin(
         AlphaEvoForceTrace.cpp
         AlphaEvoForceTrace.h
         AlphaEvoButtonInput.cpp
+        AlphaEvoPedals.cpp
+        AlphaEvoPedals.h
+        BasePedalController.cpp
+        BasePedalController.h
         AlphaEvoButtonInput.h
         ui/ClutchPaddlesView.cpp
         ui/ClutchPaddlesView.h

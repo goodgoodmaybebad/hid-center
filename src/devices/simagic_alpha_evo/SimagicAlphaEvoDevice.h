@@ -14,6 +14,7 @@ class AlphaEvoButtonInput;
 class AlphaEvoForceTrace;
 class AlphaEvoSettings;
 class AlphaEvoTelemetry;
+class BasePedalController;
 class WheelConfigController;
 class WheelLedController;
 
@@ -40,6 +41,7 @@ private:
     AlphaEvoForceTrace *m_forceTrace = nullptr;
     AlphaEvoButtonInput *m_buttons = nullptr;
     AlphaEvoButtonInput *m_pedalInput = nullptr;
+    BasePedalController *m_basePedals = nullptr;
 
     /// Why probing failed, empty when it succeeded. Kept rather than returned,
     /// because a base that will not talk is still worth showing a page for.

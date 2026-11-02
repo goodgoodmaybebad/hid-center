@@ -6,19 +6,25 @@
 #include <QPointer>
 #include <QWidget>
 
+class QCheckBox;
+class QComboBox;
+class QGroupBox;
 class QLabel;
 class QProgressBar;
+class QSpinBox;
 
 namespace hidcenter::simagic_alpha_evo {
 
 class AlphaEvoButtonInput;
+class BasePedalController;
 
-/// The *Pedals* tab: where pedals plugged into the base by CAN-Bus are, live.
+/// The *Pedals* tab: where pedals plugged into the base by CAN-Bus are, live,
+/// and the brake's settings.
 ///
-/// Read only. The base reports such pedals as two more axes of its joystick
-/// report, and this shows them as bars, with the raw value beside each. How
-/// their settings are written, through the base, is not known, so nothing here
-/// changes them.
+/// The base reports such pedals as two more axes of its joystick report, and
+/// this shows them as bars, with the raw value beside each. Below them, the
+/// brake's sensor, curve and range, which BasePedalController sends only once
+/// the user has turned that on.
 ///
 /// `input` is read only while the page is shown, as the Wheel tab's is. It
 /// should be one of its own: switching between the two tabs would otherwise let
@@ -28,8 +34,10 @@ class PedalsPage : public QWidget
     Q_OBJECT
 
 public:
-    /// `input` may be null, which leaves a page that reads nothing.
-    explicit PedalsPage(AlphaEvoButtonInput *input, QWidget *parent = nullptr);
+    /// Either may be null: no `input` leaves a page that reads nothing, and no
+    /// `pedals` one whose brake settings cannot be changed.
+    PedalsPage(AlphaEvoButtonInput *input, BasePedalController *pedals,
+               QWidget *parent = nullptr);
     ~PedalsPage() override;
 
 protected:
@@ -40,7 +48,19 @@ private:
     void showPedals();
     void showStatus();
 
+    /// The brake box: build it, fill it from the controller, and enable what
+    /// may be changed.
+    QGroupBox *makeBrakeBox();
+    void showBrakeSettings();
+
     QPointer<AlphaEvoButtonInput> m_input;
+    QPointer<BasePedalController> m_pedals;
+    QCheckBox *m_brakeEnabled = nullptr;
+    QComboBox *m_brakeSensor = nullptr;
+    QComboBox *m_brakeCurve = nullptr;
+    QSpinBox *m_brakeRangeStart = nullptr;
+    QSpinBox *m_brakeRangeEnd = nullptr;
+    QLabel *m_brakeStatus = nullptr;
     QProgressBar *m_throttle = nullptr;
     QProgressBar *m_brake = nullptr;
     QLabel *m_throttleRaw = nullptr;

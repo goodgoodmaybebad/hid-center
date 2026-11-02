@@ -7,6 +7,7 @@
 #include "AlphaEvoForceTrace.h"
 #include "AlphaEvoSettings.h"
 #include "AlphaEvoTelemetry.h"
+#include "BasePedalController.h"
 #include "WheelConfigController.h"
 #include "WheelLedController.h"
 #include "core/Logging.h"
@@ -69,6 +70,11 @@ bool SimagicAlphaEvoDevice::initialize(QString *error)
     // Wheel tab hiding as the Pedals tab shows cannot switch it off.
     m_pedalInput = new AlphaEvoButtonInput(m_context, this);
 
+    // The brake settings of pedals on the base. Sends nothing until the user
+    // turns it on and changes something.
+    m_basePedals = new BasePedalController(
+        m_settings, m_context ? m_context->info() : UsbDeviceInfo{}, this);
+
     if (!m_settings->probe(&m_probeError)) {
         // Deliberately not a failure. Returning false would replace every tab
         // with an error page, and a base that will not answer is exactly when
@@ -123,7 +129,7 @@ QVector<DevicePage> SimagicAlphaEvoDevice::pages()
             {tr("Telemetry"), new TelemetryPage(m_telemetry, m_settings)},
             {tr("Wheelbase LED"), new WheelbaseLedPage(m_leds, m_settings, m_probeError)},
             {tr("Wheel"), new WheelPage(m_wheelConfig, m_buttons, m_settings, m_probeError)},
-            {tr("Pedals"), new PedalsPage(m_pedalInput)}};
+            {tr("Pedals"), new PedalsPage(m_pedalInput, m_basePedals)}};
 }
 
 } // namespace hidcenter::simagic_alpha_evo

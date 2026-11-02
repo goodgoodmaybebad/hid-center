@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <QByteArray>
 #include <QObject>
 #include <QString>
 
@@ -173,6 +174,11 @@ public:
     /// is not.
     void writeWheelConfigAsync(const WheelConfig &config, int chunk);
 
+    /// Send one report of the pass-through to pedals on the base. Returns
+    /// immediately and answers through pedalReportSent(). Offline it is logged
+    /// instead; before the I/O thread is there it fails rather than waiting.
+    void writePedalReportAsync(const QByteArray &report);
+
 Q_SIGNALS:
     /// The *settings* changed. Not emitted when a read returns identical bytes,
     /// so an idle device costs the UI nothing.
@@ -212,6 +218,9 @@ Q_SIGNALS:
     /// Wheel configuration writes started failing, or started working again.
     /// Relayed from the I/O thread unchanged; the edge, not every write.
     void wheelConfigSent(bool ok, const QString &error, bool dryRun);
+
+    /// One pedal report was sent, or failed to be. Relayed from the I/O thread.
+    void pedalReportSent(bool ok, const QString &error, bool dryRun);
 
 private Q_SLOTS:
     void onStatusRead(const hidcenter::simagic_alpha_evo::StatusSnapshot &snapshot);

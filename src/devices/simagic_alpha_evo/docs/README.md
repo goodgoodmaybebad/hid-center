@@ -19,7 +19,7 @@ guess, so does this documentation (see [Confidence](#confidence)).
 | [05-wheel-config.md](05-wheel-config.md) | The steering wheel's own 240-byte configuration block (`0x91`, sub-commands 0–3): buttons, LED colours, RPM lights, brightness, clutch paddles |
 | [06-input-reports.md](06-input-reports.md) | Input report `0x01`: buttons and the applied-force field |
 | [07-host-behaviour.md](07-host-behaviour.md) | Sequencing, rates, keep-alives and other timing rules a host has to follow |
-| [08-pedals-on-the-base.md](08-pedals-on-the-base.md) | Pedals on CAN-Bus: the pass-through, calibration, raw readings. Captured only, not implemented |
+| [08-pedals-on-the-base.md](08-pedals-on-the-base.md) | Pedals on CAN-Bus: the pass-through, calibration, raw readings, the brake's settings. Only the brake's settings are sent |
 
 ## The protocol at a glance
 

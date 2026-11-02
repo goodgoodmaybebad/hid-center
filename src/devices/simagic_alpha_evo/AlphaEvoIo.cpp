@@ -399,6 +399,27 @@ void AlphaEvoIo::sendWheelConfigReport(const WheelConfig &config, int chunk)
     Q_EMIT wheelConfigSent(ok, error, false);
 }
 
+void AlphaEvoIo::sendPedalReport(const QByteArray &report)
+{
+    const bool dryRun = m_dryRun;
+    qCInfo(hidcenterDevice).noquote()
+        << tr("%1 pedal report: %2")
+               .arg(dryRun ? tr("Dry run — would send") : tr("Sending"))
+               .arg(toHex(report));
+    if (dryRun) {
+        Q_EMIT pedalReportSent(true, QString(), true);
+        return;
+    }
+
+    QString error;
+    const bool ok = m_hidInterface && m_hidInterface->setFeatureReport(report);
+    if (!ok) {
+        error = m_hidInterface ? m_hidInterface->lastError() : tr("The device is not open.");
+        qCWarning(hidcenterDevice) << "Pedal report write failed:" << error;
+    }
+    Q_EMIT pedalReportSent(ok, error, false);
+}
+
 void AlphaEvoIo::requestApply(const SettingValues &changes)
 {
     const bool dryRun = m_dryRun;

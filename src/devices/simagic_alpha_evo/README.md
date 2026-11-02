@@ -38,8 +38,10 @@ The plugin adds six tabs to the device page.
   this wheel** stops the app sending anything to the wheel on the base, so what
   SIMAGIC's own software set on it, LEDs included, stays.
 - **Pedals**: shows pedals plugged into the base by CAN-Bus, such as a P1000 in
-  its blue-light mode, as live throttle and brake bars. Read only: their settings
-  cannot be changed yet.
+  its blue-light mode, as live throttle and brake bars, and sets the brake's
+  sensor (load cell or angle), its curve (SimPro's four) and its range. Off
+  until turned on, since every change also restates a calibration that cannot
+  be read back.
 
 Settings are saved and re-applied to the wheel at start-up. Each page has a dry-run
 option that logs the exact bytes instead of sending them. An offline preview lets

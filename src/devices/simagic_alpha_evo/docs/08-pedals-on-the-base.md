@@ -5,9 +5,15 @@ are reached through the base. Their positions are two axes of the joystick
 report ([06](06-input-reports.md#pedals-on-the-base)); their settings travel in
 a pass-through carried by the settings report.
 
-Everything here is from one capture, `pedal-calibration.pcapng`: SIMAGIC SimPro
-Manager calibrating a two-pedal P1000 (throttle and brake) on an Alpha Evo. **No
-part of it is implemented**, and none of it has been sent by this app.
+Everything here is from two captures of SIMAGIC SimPro Manager and a two-pedal
+P1000 (throttle and brake) on an Alpha Evo: `pedal-calibration.pcapng`,
+calibrating it, and `pedal-settings.pcapng`, changing the brake's settings.
+
+**What the app sends** is only the settings update, for the brake: see
+[Every settings change is the same update](#every-settings-change-is-the-same-update),
+`AlphaEvoPedals.h` and `BasePedalController.h`. It never calibrates, never asks
+for the `f6` reply, and never sends `f1 18`; it sends nothing until the user has
+turned brake settings on and changed one.
 
 What SimPro had the brake set to throughout, by its owner: **load cell** mode
 (the other is angle, the second sensor), shown in **%** (the other is kg), a
