@@ -1,11 +1,25 @@
 # HID Center
 
-A Qt desktop application for configuring USB HID sim-racing hardware: force-feedback
-settings on a direct-drive wheelbase, response curves on pedals, and so on.
+A Qt desktop application for configuring USB HID sim-racing hardware:
+force-feedback settings on a direct-drive wheelbase, response curves and
+calibration for pedals, wheel LED modes, and live telemetry-driven effects.
 
-It also picks up telemetry from running sims.
+## Features
 
-> **Note:** a telemetry plugin for Le Mans Ultimate (LMU) is coming soon.
+- Configure force feedback, rotation, signal and LED settings on SIMAGIC Alpha
+  Evo wheelbases.
+- Edit pedal curves and ranges, calibrate pedals on the base, and configure
+  SIMSONN Plus X pedal settings.
+- Set wheel LED colours and modes, including RPM lights.
+- Follow telemetry from rFactor 2 and Le Mans Ultimate. A test mode lets the
+  telemetry-driven parts of the interface and the devices be used without a sim
+  running.
+- Save settings as named profiles, apply or update them, and export or import
+  them as JSON. A profile can also be associated with a telemetry source and
+  applied automatically when that game starts sending telemetry.
+- Inspect connected devices, report descriptors, and USB traffic with the
+  Protocol Analyzer, enabled with `--dev`.
+- Follow the desktop's light or dark colour scheme.
 
 ## Profiles
 
@@ -14,6 +28,13 @@ matching device, duplicated, and exported or imported as JSON. A profile can als
 be associated with a telemetry source; when that source starts sending, its
 profile is applied automatically. Profiles currently cover force feedback and the
 pedals on a SIMAGIC base, and the pedal settings on SIMSONN pedals.
+
+## Telemetry
+
+The bundled telemetry source listens on `127.0.0.1:56789` for rFactor 2 /
+Le Mans Ultimate `TelemInfoV01` datagrams. The **Telemetry** page shows the live
+values, which source is sending, and a test mode that lets values be driven by
+hand. Device modules and profiles consume the same shared frame.
 
 ![HID Center showing the FFB settings of a SIMAGIC Alpha Evo](docs/screenshot.png)
 
