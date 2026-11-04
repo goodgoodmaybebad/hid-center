@@ -8,6 +8,11 @@ calibration for pedals, wheel LED modes, and live telemetry-driven effects.
 > a P1000 pedal set connected to its base. The SIMSONN Plus X module is inherited
 > from the original project and has not been verified here.
 
+![The Home dashboard](docs/home.png)
+
+*The Home dashboard: connected devices, telemetry state, system status and the
+application log.*
+
 ## Features
 
 - Configure force feedback, rotation, signal and LED settings on SIMAGIC Alpha
@@ -26,6 +31,26 @@ calibration for pedals, wheel LED modes, and live telemetry-driven effects.
   Protocol Analyzer, enabled with `--dev`.
 - Follow the desktop's light or dark colour scheme.
 
+## Screenshots
+
+### Force feedback
+
+![Force-feedback settings](docs/ffb.png)
+
+*Force-feedback, rotation and signal settings for the wheelbase.*
+
+### Wheel
+
+![Wheel and controls](docs/wheel.png)
+
+*The wheel page, with a live schematic of the attached wheel and its settings.*
+
+### Pedals
+
+![Pedal curves and range](docs/pedals.png)
+
+*Pedal curves, range handles and calibration for pedals connected to the base.*
+
 ## Profiles
 
 Settings can be saved as named profiles from the **Profiles** page, applied to a
@@ -41,8 +66,6 @@ The bundled telemetry source listens on `127.0.0.1:56789` for rFactor 2 /
 Le Mans Ultimate `TelemInfoV01` datagrams. The **Telemetry** page shows the live
 values, which source is sending, and a test mode that lets values be driven by
 hand. Device modules and profiles consume the same shared frame.
-
-![HID Center showing the FFB settings of a SIMAGIC Alpha Evo](docs/screenshot.png)
 
 ## Supported devices
 
