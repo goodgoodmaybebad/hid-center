@@ -89,6 +89,27 @@ public:
     int rangeEndOf(int group) const;
     void setRange(int group, int startPercent, int endPercent);
 
+    /// The whole editable state of the two pedals, for a profile. Presets are
+    /// not included: the points themselves are the truth, and curveOf() derives
+    /// the preset from them.
+    struct ProfileState
+    {
+        PedalBrakeSensor brakeSensor = PedalBrakeSensor::LoadCell;
+        std::array<int, kPedalCurvePointCount> brakePoints{25, 50, 75};
+        std::array<int, kPedalCurvePointCount> throttlePoints{25, 50, 75};
+        int brakeStart = 0;
+        int brakeEnd = 100;
+        int throttleStart = 0;
+        int throttleEnd = 100;
+    };
+
+    ProfileState profileState() const;
+
+    /// Put the whole state in one change, so an applied profile is a single
+    /// update rather than one report per field. Does not change whether writes
+    /// are enabled.
+    void setProfileState(const ProfileState &state);
+
     /// Whether an update, or a calibration's reports, are going out now.
     bool isSending() const;
 

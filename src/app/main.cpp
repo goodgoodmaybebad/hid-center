@@ -3,6 +3,7 @@
 
 #include "app/InterfaceScale.h"
 #include "app/MainWindow.h"
+#include "app/Theme.h"
 #include "core/DeveloperMode.h"
 #include "core/Logging.h"
 #include "core/analyzer/UsbPacket.h"
@@ -173,6 +174,11 @@ int main(int argc, char **argv)
     QApplication app(argc, argv);
     QGuiApplication::setDesktopFileName(QStringLiteral("hid-center"));
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/hid-center.svg")));
+
+    // Before any widget exists, so nothing is ever shown in the unthemed
+    // palette and the custom-painted widgets read the final colours from the
+    // first frame they draw.
+    applyTheme(app);
 
     applyDefaultLoggingRules();
     // Before anything else logs, so the log window opens with the full record of

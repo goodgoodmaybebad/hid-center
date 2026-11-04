@@ -30,6 +30,10 @@ public:
     QVector<DevicePage> pages() override;
     QVector<DeviceInfoField> infoFields() const override;
 
+    bool supportsProfiles() const override { return true; }
+    bool captureProfile(QJsonObject *profile, QString *error) const override;
+    bool applyProfile(const QJsonObject &profile, QString *error) override;
+
 private:
     IUsbDevice *m_context = nullptr;
     QString m_modelName;

@@ -11,7 +11,8 @@ namespace hidcenter::simagic_alpha_evo {
 
 /// One pedal's response, drawn and edited as SimPro 3 draws it: the pedal's
 /// position now, as a segmented bar; the curve, with three dots that drag up and
-/// down; and below it a range slider with a handle at each end.
+/// down and a value pill beside each; and below it a range slider with a handle
+/// at each end.
 ///
 /// The curve runs from the range's start at 0 % to its end at 100 %, through the
 /// three points, which sit a quarter, half and three quarters of the way between

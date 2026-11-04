@@ -51,6 +51,10 @@ public:
     /// description when there is no plugin to ask.
     QString displayName() const;
 
+    /// The family module's stable name. Used to keep a profile's kind aligned
+    /// with the module that understands it.
+    QString familyName() const;
+
     /// The module itself. Null when the plugin declined to make one, or when
     /// start() has not run yet.
     IDevice *device() const { return m_device; }

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <QJsonObject>
 #include <QObject>
 #include <QString>
 #include <QVector>
@@ -66,6 +67,36 @@ public:
     /// Not pure: a module with nothing to publish overrides nothing. Re-read
     /// whenever infoFieldsChanged() is emitted.
     virtual QVector<DeviceInfoField> infoFields() const { return {}; }
+
+    /// Whether this module can take part in the application's profiles.
+    ///
+    /// A profile is a named, portable snapshot of the settings a device family
+    /// supports. The application owns the name, game association and storage;
+    /// the module owns the shape of the data, so hardware-specific details never
+    /// have to cross into the profile store.
+    virtual bool supportsProfiles() const { return false; }
+
+    /// Fill `profile` with this device's current settings. False with `error`
+    /// set when there is nothing usable to capture — typically because the
+    /// settings have not been read from the hardware yet.
+    virtual bool captureProfile(QJsonObject *profile, QString *error) const
+    {
+        Q_UNUSED(profile);
+        if (error)
+            *error = tr("This device does not support profiles.");
+        return false;
+    }
+
+    /// Apply a profile previously returned by captureProfile(). False with
+    /// `error` set when it cannot be applied. Long writes are allowed to finish
+    /// asynchronously after this returns true.
+    virtual bool applyProfile(const QJsonObject &profile, QString *error)
+    {
+        Q_UNUSED(profile);
+        if (error)
+            *error = tr("This device does not support profiles.");
+        return false;
+    }
 
 Q_SIGNALS:
     /// Progress or trouble worth showing in the status bar.

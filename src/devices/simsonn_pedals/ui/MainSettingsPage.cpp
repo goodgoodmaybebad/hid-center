@@ -53,6 +53,10 @@ QString curveText(const QVector<double> &values)
 /// to go back to.
 constexpr int kDefaultFilter = 2;
 
+/// A slider-and-value row long enough to aim precisely, but not so long that it
+/// runs the width of a wide pedal box.
+constexpr int kControlRowWidth = 460;
+
 /// The throttle cut point, stored in tenths of a percent, as it is shown.
 QString cutPointText(int tenths)
 {
@@ -73,6 +77,7 @@ QGroupBox *MainSettingsPage::pedalBox(const QString &title, bool brake, Row *row
     // output above the high one. Two numbers that can be set past each other
     // would allow a pedal with no travel at all.
     auto *deadzones = new RangeSlider(box);
+    deadzones->setMaximumWidth(kControlRowWidth);
     deadzones->setScale(kDeadzoneMinimum, kDeadzoneMaximum);
     deadzones->setMinimumSeparation(kDeadzoneLeastTravel);
     deadzones->setValues(kDeadzoneMinimum, kDeadzoneMaximum);
@@ -89,6 +94,7 @@ QGroupBox *MainSettingsPage::pedalBox(const QString &title, bool brake, Row *row
     auto *filterEnabled = new QCheckBox(box);
     auto *filter = new QSlider(Qt::Horizontal, box);
     filter->setRange(1, ConfigRead::kFilterMaximum);
+    filter->setMinimumWidth(180);
     filter->setPageStep(1);
     filter->setTickPosition(QSlider::TicksBelow);
     filter->setTickInterval(1);
@@ -105,12 +111,15 @@ QGroupBox *MainSettingsPage::pedalBox(const QString &title, bool brake, Row *row
     filterEnabled->setToolTip(filterTip);
     filter->setToolTip(filterTip);
     filterText->setToolTip(filterTip);
-    auto *filtering = new QHBoxLayout;
+    auto *filteringRow = new QWidget(box);
+    filteringRow->setMaximumWidth(kControlRowWidth);
+    filteringRow->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    auto *filtering = new QHBoxLayout(filteringRow);
     filtering->setContentsMargins(0, 0, 0, 0);
     filtering->addWidget(filterEnabled);
     filtering->addWidget(filter, 1);
     filtering->addWidget(filterText);
-    form->addRow(tr("Filtering"), filtering);
+    form->addRow(tr("Filtering"), filteringRow);
     row->filterEnabled = filterEnabled;
     row->filter = filter;
     row->filterText = filterText;
@@ -174,6 +183,7 @@ void MainSettingsPage::addBrakeRows(QFormLayout *form, QWidget *box)
     m_cutEnabled = new QCheckBox(box);
     m_cutPoint = new QSlider(Qt::Horizontal, box);
     m_cutPoint->setRange(kThrottleCutMinimum, kThrottleCutMaximum);
+    m_cutPoint->setMinimumWidth(180);
     m_cutPoint->setSingleStep(1);
     m_cutPoint->setPageStep(50);
     m_cutPointText = new QLabel(box);
@@ -188,12 +198,15 @@ void MainSettingsPage::addBrakeRows(QFormLayout *form, QWidget *box)
     m_cutEnabled->setToolTip(cutTip);
     m_cutPoint->setToolTip(cutTip);
     m_cutPointText->setToolTip(cutTip);
-    auto *cut = new QHBoxLayout;
+    auto *cutRow = new QWidget(box);
+    cutRow->setMaximumWidth(kControlRowWidth);
+    cutRow->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    auto *cut = new QHBoxLayout(cutRow);
     cut->setContentsMargins(0, 0, 0, 0);
     cut->addWidget(m_cutEnabled);
     cut->addWidget(m_cutPoint, 1);
     cut->addWidget(m_cutPointText);
-    form->addRow(tr("Throttle cut"), cut);
+    form->addRow(tr("Throttle cut"), cutRow);
     connect(m_cutEnabled, &QCheckBox::toggled, this, [this](bool on) {
         m_cutPoint->setEnabled(on);
         m_cutPointText->setEnabled(on);

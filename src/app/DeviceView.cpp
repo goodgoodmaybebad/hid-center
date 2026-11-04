@@ -13,7 +13,7 @@
 #include "core/plugin/IDevice.h"
 #include "core/plugin/IDevicePlugin.h"
 
-#include <QFrame>
+#include <QFont>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QTabWidget>
@@ -27,16 +27,12 @@ DeviceView::DeviceView(DeviceModule *module, QWidget *parent)
     , m_context(module ? module->usbDevice() : nullptr)
 {
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setContentsMargins(18, 14, 18, 16);
+    layout->setSpacing(12);
 
     // The header first, so it exists whatever happens to the module below.
     buildHeader();
     layout->addLayout(m_headerLayout);
-
-    auto *separator = new QFrame(this);
-    separator->setFrameShape(QFrame::HLine);
-    separator->setFrameShadow(QFrame::Sunken);
-    layout->addWidget(separator);
 
     m_tabs = new QTabWidget(this);
     layout->addWidget(m_tabs);
@@ -83,15 +79,17 @@ const UsbDeviceInfo &DeviceView::info() const
 void DeviceView::buildHeader()
 {
     m_headerLayout = new QHBoxLayout;
-    m_headerLayout->setContentsMargins(8, 6, 8, 6);
+    m_headerLayout->setContentsMargins(4, 2, 4, 2);
+    m_headerLayout->setSpacing(10);
 
     // The name belongs here rather than on a page: it identifies what every tab
     // is acting on, so it has to survive switching between them.
     const QString name = m_module ? m_module->displayName() : QString();
-    auto *title = new QLabel(QStringLiteral("<b>%1</b>").arg(name.toHtmlEscaped()), this);
+    auto *title = new QLabel(name, this);
     title->setObjectName(QStringLiteral("deviceName"));
     QFont titleFont = title->font();
-    titleFont.setPointSizeF(titleFont.pointSizeF() * 1.3);
+    titleFont.setPointSizeF(titleFont.pointSizeF() * 1.45);
+    titleFont.setWeight(QFont::DemiBold);
     title->setFont(titleFont);
     title->setTextInteractionFlags(Qt::TextSelectableByMouse);
     m_headerLayout->addWidget(title);

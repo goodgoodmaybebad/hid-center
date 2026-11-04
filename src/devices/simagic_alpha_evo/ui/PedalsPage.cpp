@@ -12,7 +12,6 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFontDatabase>
-#include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -20,7 +19,6 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QSignalBlocker>
-#include <QSpinBox>
 #include <QVBoxLayout>
 
 #include <cmath>
@@ -35,17 +33,6 @@ constexpr int kBarSteps = 1000;
 int barValue(qreal fraction)
 {
     return int(std::lround(qBound(0.0, fraction, 1.0) * kBarSteps));
-}
-
-QSpinBox *makePercentBox(const QString &objectName, int minimum, int maximum, QWidget *parent)
-{
-    auto *box = new QSpinBox(parent);
-    box->setObjectName(objectName);
-    box->setRange(minimum, maximum);
-    box->setSuffix(QStringLiteral(" %"));
-    // Typing 35 would otherwise send 3 to the pedals on the way.
-    box->setKeyboardTracking(false);
-    return box;
 }
 
 } // namespace
@@ -277,8 +264,8 @@ QGroupBox *PedalsPage::makePedalPanel(PedalControls &controls, const QString &ti
     controls.curve->addItem(tr("Strong start"));
     controls.curve->addItem(tr("S-shaped"));
     controls.curve->setPlaceholderText(tr("Custom"));
-    controls.curve->setToolTip(tr("SimPro's four curves, in its order. Dragging a dot, or "
-                                  "changing a point below, makes the curve a custom one."));
+    controls.curve->setToolTip(tr("SimPro's four curves, in its order. Dragging a dot makes "
+                                  "the curve a custom one."));
     top->addWidget(controls.curve, 1);
     if (extra)
         top->addWidget(extra);
@@ -291,27 +278,6 @@ QGroupBox *PedalsPage::makePedalPanel(PedalControls &controls, const QString &ti
            "quarters of the way in, and the handles below for the part of its travel it uses."));
     layout->addWidget(controls.editor, 1);
 
-    // Exact values, beneath the graph they also set.
-    auto *form = new QFormLayout;
-    auto *points = new QHBoxLayout;
-    for (std::size_t i = 0; i < controls.points.size(); ++i) {
-        controls.points[i] =
-            makePercentBox(name + QStringLiteral("Point%1").arg(i + 1), 0, 100, panel);
-        points->addWidget(controls.points[i]);
-    }
-    points->addStretch(1);
-    form->addRow(tr("At 25 / 50 / 75 %"), points);
-
-    auto *range = new QHBoxLayout;
-    controls.rangeStart = makePercentBox(name + QStringLiteral("RangeStart"), 0, 99, panel);
-    controls.rangeEnd = makePercentBox(name + QStringLiteral("RangeEnd"), 1, 100, panel);
-    range->addWidget(controls.rangeStart);
-    range->addWidget(new QLabel(tr("to"), panel));
-    range->addWidget(controls.rangeEnd);
-    range->addStretch(1);
-    form->addRow(tr("Range"), range);
-    layout->addLayout(form);
-
     return panel;
 }
 
@@ -322,24 +288,6 @@ void PedalsPage::connectPedal(const PedalControls &controls)
         if (index >= 0)
             m_pedals->setCurve(group, index);
     });
-
-    const auto setPoints = [this, controls] {
-        std::array<int, kPedalCurvePointCount> percents{};
-        for (std::size_t i = 0; i < percents.size(); ++i)
-            percents[i] = controls.points[i]->value();
-        m_pedals->setCurvePoints(controls.group, percents);
-        showSettings();
-    };
-    for (QSpinBox *point : controls.points)
-        connect(point, &QSpinBox::valueChanged, this, setPoints);
-
-    const auto setRange = [this, controls] {
-        m_pedals->setRange(controls.group, controls.rangeStart->value(),
-                           controls.rangeEnd->value());
-        showSettings();
-    };
-    connect(controls.rangeStart, &QSpinBox::valueChanged, this, setRange);
-    connect(controls.rangeEnd, &QSpinBox::valueChanged, this, setRange);
 
     // A drag on the graph: both at once, the range first, so the points are
     // set against the range they were dragged on.
@@ -359,11 +307,8 @@ void PedalsPage::showSettings()
         known && m_pedals->calibration() != BasePedalController::Calibration::Idle;
 
     QList<QWidget *> controls{m_brakeSensor};
-    for (const PedalControls *pedal : {&m_brake, &m_throttle}) {
-        controls << pedal->curve << pedal->rangeStart << pedal->rangeEnd;
-        for (QSpinBox *point : pedal->points)
-            controls << point;
-    }
+    for (const PedalControls *pedal : {&m_brake, &m_throttle})
+        controls << pedal->curve;
 
     {
         // Blockers cannot be copied, which std::vector does not need to.
@@ -381,10 +326,6 @@ void PedalsPage::showSettings()
                 pedal->curve->setCurrentIndex(m_pedals->curveOf(pedal->group));
                 const std::array<int, kPedalCurvePointCount> points =
                     m_pedals->curvePointsOf(pedal->group);
-                for (std::size_t i = 0; i < points.size(); ++i)
-                    pedal->points[i]->setValue(points[i]);
-                pedal->rangeStart->setValue(m_pedals->rangeStartOf(pedal->group));
-                pedal->rangeEnd->setValue(m_pedals->rangeEndOf(pedal->group));
                 pedal->editor->setRange(m_pedals->rangeStartOf(pedal->group),
                                         m_pedals->rangeEndOf(pedal->group));
                 pedal->editor->setPoints(points);

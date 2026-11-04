@@ -43,6 +43,11 @@ QString DeviceModule::displayName() const
     return m_plugin ? m_plugin->displayNameFor(m_info) : m_info.describe();
 }
 
+QString DeviceModule::familyName() const
+{
+    return m_plugin ? m_plugin->familyName() : QString();
+}
+
 void DeviceModule::start()
 {
     if (m_started)

@@ -1,22 +1,80 @@
 # HID Center
 
-A Qt desktop application for configuring USB HID sim-racing hardware: force-feedback
-settings on a direct-drive wheelbase, response curves on pedals, and so on.
+A Qt desktop application for configuring USB HID sim-racing hardware:
+force-feedback settings on a direct-drive wheelbase, response curves and
+calibration for pedals, wheel LED modes, and live telemetry-driven effects.
 
-It also picks up telemetry from running sims.
+> **Fork note:** the hardware work in this fork targets the SIMAGIC Alpha Evo and
+> a P1000 pedal set connected to its base. The SIMSONN Plus X module is inherited
+> from the original project and has not been verified here.
 
-> **Note:** a telemetry plugin for Le Mans Ultimate (LMU) is coming soon.
+![The Home dashboard](docs/home.png)
 
-![HID Center showing the FFB settings of a SIMAGIC Alpha Evo](docs/screenshot.png)
+*The Home dashboard: connected devices, telemetry state, system status and the
+application log.*
+
+## Features
+
+- Configure force feedback, rotation, signal and LED settings on SIMAGIC Alpha
+  Evo wheelbases.
+- Edit pedal curves and ranges, and calibrate the pedals connected to a SIMAGIC
+  base. The pedal work in this fork has been developed against a SIMAGIC P1000
+  set.
+- Set wheel LED colours and modes, including RPM lights.
+- Follow telemetry from rFactor 2 and Le Mans Ultimate. A test mode lets the
+  telemetry-driven parts of the interface and the devices be used without a sim
+  running.
+- Save settings as named profiles, apply or update them, and export or import
+  them as JSON. A profile can also be associated with a telemetry source and
+  applied automatically when that game starts sending telemetry.
+- Inspect connected devices, report descriptors, and USB traffic with the
+  Protocol Analyzer, enabled with `--dev`.
+- Follow the desktop's light or dark colour scheme.
+
+## Screenshots
+
+### Force feedback
+
+![Force-feedback settings](docs/ffb.png)
+
+*Force-feedback, rotation and signal settings for the wheelbase.*
+
+### Wheel
+
+![Wheel and controls](docs/wheel.png)
+
+*The wheel page, with a live schematic of the attached wheel and its settings.*
+
+### Pedals
+
+![Pedal curves and range](docs/pedals.png)
+
+*Pedal curves, range handles and calibration for pedals connected to the base.*
+
+## Profiles
+
+Settings can be saved as named profiles from the **Profiles** page, applied to a
+matching device, duplicated, and exported or imported as JSON. A profile can also
+be associated with a telemetry source; when that source starts sending, its
+profile is applied automatically. Profiles currently cover force feedback and the
+pedals on a SIMAGIC base. The inherited SIMSONN module also exposes profile data,
+but that hardware has not been verified in this fork.
+
+## Telemetry
+
+The bundled telemetry source listens on `127.0.0.1:56789` for rFactor 2 /
+Le Mans Ultimate `TelemInfoV01` datagrams. The **Telemetry** page shows the live
+values, which source is sending, and a test mode that lets values be driven by
+hand. Device modules and profiles consume the same shared frame.
 
 ## Supported devices
 
-| Device | VID:PID |
-| --- | --- |
-| SIMAGIC Alpha Evo | `3670:0500` |
-| SIMAGIC Alpha Evo | `3670:0501` |
-| SIMAGIC Alpha Evo | `3670:0502` |
-| SIMSONN Plus X | `ddfd:6011` |
+| Device | VID:PID | Notes |
+| --- | --- | --- |
+| SIMAGIC Alpha Evo | `3670:0500` | Tested with a P1000 pedal set on the base. |
+| SIMAGIC Alpha Evo | `3670:0501` | Same module as `3670:0500`. |
+| SIMAGIC Alpha Evo | `3670:0502` | Same module as `3670:0500`. |
+| SIMSONN Plus X | `ddfd:6011` | Inherited from the original project; not verified in this fork. |
 
 ## Building
 

@@ -14,6 +14,12 @@
 #include "SettingsSave.h"
 #include "ui/StatusPage.h"
 
+#include <QJsonArray>
+#include <QJsonObject>
+
+#include <array>
+#include <optional>
+
 namespace hidcenter::simsonn_pedals {
 namespace {
 
@@ -23,6 +29,38 @@ namespace {
 bool isVendorDefined(quint16 usagePage)
 {
     return usagePage >= 0xFF00;
+}
+
+QString elastomerName(Elastomer elastomer)
+{
+    switch (elastomer) {
+    case Elastomer::Soft:
+        return QStringLiteral("soft");
+    case Elastomer::Medium:
+        return QStringLiteral("medium");
+    case Elastomer::Hard:
+        return QStringLiteral("hard");
+    }
+    return {};
+}
+
+std::optional<Elastomer> elastomerForName(const QString &name)
+{
+    if (name == QLatin1String("soft"))
+        return Elastomer::Soft;
+    if (name == QLatin1String("medium"))
+        return Elastomer::Medium;
+    if (name == QLatin1String("hard"))
+        return Elastomer::Hard;
+    return std::nullopt;
+}
+
+QJsonArray curveToJson(const std::array<qint8, ConfigRead::kCurvePoints> &curve)
+{
+    QJsonArray array;
+    for (const qint8 value : curve)
+        array.append(int(value));
+    return array;
 }
 
 } // namespace
@@ -160,6 +198,134 @@ QVector<DevicePage> SimsonnPedalsDevice::pages()
     return {{tr("Status"), status},
             {tr("Main Settings"), settings},
             {tr("Calibration"), calibration}};
+}
+
+bool SimsonnPedalsDevice::captureProfile(QJsonObject *profile, QString *error) const
+{
+    const std::optional<SettingsSave::Settings> stored =
+        m_settingsSave ? m_settingsSave->stored() : std::nullopt;
+    if (!stored) {
+        if (error)
+            *error = tr("The pedals' settings have not been read yet.");
+        return false;
+    }
+
+    QJsonObject root;
+    root.insert(QStringLiteral("schema"), 1);
+
+    QJsonArray pedals;
+    for (const SettingsSave::PedalSettings &pedal : stored->pedals) {
+        QJsonObject entry;
+        entry.insert(QStringLiteral("curve"), curveToJson(pedal.curve));
+        entry.insert(QStringLiteral("startDeadzone"), pedal.startDeadzone);
+        entry.insert(QStringLiteral("endDeadzone"), pedal.endDeadzone);
+        entry.insert(QStringLiteral("filter"), pedal.filter);
+        pedals.append(entry);
+    }
+    root.insert(QStringLiteral("pedals"), pedals);
+
+    QJsonObject brake;
+    brake.insert(QStringLiteral("forceKg"), stored->brake.forceKg);
+    if (stored->brake.elastomer)
+        brake.insert(QStringLiteral("elastomer"), elastomerName(*stored->brake.elastomer));
+    if (stored->brake.throttleCut) {
+        QJsonObject cut;
+        cut.insert(QStringLiteral("enabled"), stored->brake.throttleCut->enabled);
+        cut.insert(QStringLiteral("tenths"), stored->brake.throttleCut->tenths);
+        brake.insert(QStringLiteral("throttleCut"), cut);
+    }
+    root.insert(QStringLiteral("brake"), brake);
+
+    if (profile)
+        *profile = root;
+    return true;
+}
+
+bool SimsonnPedalsDevice::applyProfile(const QJsonObject &profile, QString *error)
+{
+    if (!m_settingsSave || !m_vendorInterface) {
+        if (error)
+            *error = tr("The pedals cannot be written to on this connection.");
+        return false;
+    }
+    if (m_settingsSave->isRunning()) {
+        if (error)
+            *error = tr("A settings save is already in progress.");
+        return false;
+    }
+    if (profile.value(QStringLiteral("schema")).toInt() != 1) {
+        if (error)
+            *error = tr("This profile was written by an unsupported version of HID Center.");
+        return false;
+    }
+
+    const std::optional<SettingsSave::Settings> current = m_settingsSave->stored();
+    if (!current) {
+        if (error)
+            *error = tr("The pedals' settings have not been read yet.");
+        return false;
+    }
+
+    SettingsSave::Settings settings = *current;
+
+    const QJsonArray pedals = profile.value(QStringLiteral("pedals")).toArray();
+    if (pedals.size() == kPedalCount) {
+        for (int i = 0; i < kPedalCount; ++i) {
+            const QJsonObject entry = pedals.at(i).toObject();
+            SettingsSave::PedalSettings &pedal = settings.pedals[std::size_t(i)];
+
+            const QJsonArray curve = entry.value(QStringLiteral("curve")).toArray();
+            if (curve.size() == ConfigRead::kCurvePoints) {
+                for (int point = 0; point < ConfigRead::kCurvePoints; ++point) {
+                    pedal.curve[std::size_t(point)] =
+                        qint8(qBound(-100, curve.at(point).toInt(), 100));
+                }
+            }
+
+            if (entry.contains(QStringLiteral("startDeadzone")))
+                pedal.startDeadzone =
+                    quint8(qBound(0, entry.value(QStringLiteral("startDeadzone")).toInt(), 100));
+            if (entry.contains(QStringLiteral("endDeadzone")))
+                pedal.endDeadzone =
+                    quint8(qBound(0, entry.value(QStringLiteral("endDeadzone")).toInt(),
+                                  100 - int(pedal.startDeadzone)));
+            if (entry.contains(QStringLiteral("filter")))
+                pedal.filter =
+                    quint8(qBound(0, entry.value(QStringLiteral("filter")).toInt(),
+                                  ConfigRead::kFilterMaximum));
+        }
+    }
+
+    const QJsonObject brake = profile.value(QStringLiteral("brake")).toObject();
+
+    std::optional<Elastomer> elastomer = settings.brake.elastomer;
+    if (brake.contains(QStringLiteral("elastomer")))
+        elastomer = elastomerForName(brake.value(QStringLiteral("elastomer")).toString());
+    if (elastomer) {
+        settings.brake.elastomer = elastomer;
+        if (brake.contains(QStringLiteral("forceKg"))) {
+            settings.brake.forceKg =
+                qBound(kBrakeForceMinimumKg,
+                       brake.value(QStringLiteral("forceKg")).toInt(),
+                       brakeForceMaximumKg(*elastomer));
+        }
+    }
+
+    const QJsonObject cut = brake.value(QStringLiteral("throttleCut")).toObject();
+    if (!cut.isEmpty() && settings.brake.throttleCut) {
+        settings.brake.throttleCut->enabled =
+            cut.value(QStringLiteral("enabled")).toBool(settings.brake.throttleCut->enabled);
+        if (cut.contains(QStringLiteral("tenths"))) {
+            settings.brake.throttleCut->tenths =
+                qBound(kThrottleCutMinimum, cut.value(QStringLiteral("tenths")).toInt(),
+                       kThrottleCutMaximum);
+        }
+    }
+
+    m_settingsSave->save(*m_vendorInterface, settings);
+    if (error)
+        error->clear();
+    return true;
 }
 
 } // namespace hidcenter::simsonn_pedals

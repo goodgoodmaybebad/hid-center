@@ -7,16 +7,29 @@
 #include "app/DeviceModule.h"
 #include "app/DeviceView.h"
 #include "app/HomePage.h"
+#include "app/ProfileController.h"
+#include "app/ProfileStore.h"
+#include "app/ProfilesPage.h"
+#include "app/SidebarDelegate.h"
 #include "app/telemetry_page/TelemetryPage.h"
 #include "core/Logging.h"
+#include "core/plugin/IDevice.h"
 #include "core/usb/IUsbBackend.h"
+#include "core/usb/IUsbDevice.h"
 #include "core/plugin/PluginManager.h"
 
+#include <QFrame>
+#include <QHBoxLayout>
+#include <QIcon>
 #include <QItemSelectionModel>
+#include <QLabel>
 #include <QListView>
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QStatusBar>
+#include <QVBoxLayout>
+
+#include <algorithm>
 
 namespace hidcenter {
 
@@ -27,6 +40,11 @@ MainWindow::MainWindow(PluginManager *plugins, IUsbBackend *backend, TelemetryRo
     , m_backend(backend)
     , m_telemetryRouter(telemetry)
 {
+    m_profileStore = new ProfileStore(this);
+    m_profileController = new ProfileController(m_profileStore, m_telemetryRouter, this);
+    connect(m_profileController, &ProfileController::statusMessage, this,
+            [this](const QString &message) { statusBar()->showMessage(message, 10000); });
+
     buildUi();
 
     if (m_backend) {
@@ -35,7 +53,6 @@ MainWindow::MainWindow(PluginManager *plugins, IUsbBackend *backend, TelemetryRo
 
         const QVector<UsbDeviceInfo> devices = m_backend->enumerate();
         m_model->setDevices(devices);
-        m_home->setDeviceCount(m_model->deviceCount());
 
         // Bring every device up now rather than when someone looks at it. This
         // is what makes a wheelbase get its telemetry from the moment it is
@@ -44,6 +61,9 @@ MainWindow::MainWindow(PluginManager *plugins, IUsbBackend *backend, TelemetryRo
         // waiting to be summoned.
         for (const UsbDeviceInfo &device : devices)
             moduleFor(device, false);
+
+        refreshProfileDevices();
+        refreshHomeDevices();
     }
 
     selectHome();
@@ -55,33 +75,82 @@ void MainWindow::buildUi()
     resize(1100, 720);
 
     auto *splitter = new QSplitter(Qt::Horizontal, this);
+    splitter->setChildrenCollapsible(false);
 
     m_model = new DeviceListModel(m_plugins, this);
 
-    m_sidebar = new QListView(splitter);
+    // The brand sits above the list rather than in a separate title bar: the
+    // window already has a title, and this keeps the sidebar a complete,
+    // self-contained navigation column.
+    auto *sidebarPanel = new QWidget(splitter);
+    sidebarPanel->setObjectName(QStringLiteral("sidebarPanel"));
+    auto *sidebarLayout = new QVBoxLayout(sidebarPanel);
+    sidebarLayout->setContentsMargins(10, 14, 10, 10);
+    sidebarLayout->setSpacing(0);
+
+    auto *brandRow = new QHBoxLayout;
+    brandRow->setContentsMargins(6, 0, 6, 0);
+    brandRow->setSpacing(9);
+
+    auto *logo = new QLabel(sidebarPanel);
+    logo->setPixmap(QIcon(QStringLiteral(":/icons/hid-center.svg")).pixmap(96, 96));
+    logo->setScaledContents(true);
+    logo->setFixedSize(28, 28);
+    brandRow->addWidget(logo, 0, Qt::AlignVCenter);
+
+    auto *wordmark = new QVBoxLayout;
+    wordmark->setSpacing(0);
+    auto *brand = new QLabel(tr("HID Center"), sidebarPanel);
+    brand->setObjectName(QStringLiteral("sidebarBrand"));
+    auto *tagline = new QLabel(tr("SIM RACING CONTROL"), sidebarPanel);
+    tagline->setObjectName(QStringLiteral("sidebarTagline"));
+    wordmark->addWidget(brand);
+    wordmark->addWidget(tagline);
+    brandRow->addLayout(wordmark, 1);
+    sidebarLayout->addLayout(brandRow);
+    sidebarLayout->addSpacing(16);
+
+    m_sidebar = new QListView(sidebarPanel);
+    m_sidebar->setObjectName(QStringLiteral("sidebar"));
     m_sidebar->setModel(m_model);
+    m_sidebar->setItemDelegate(new SidebarDelegate(m_sidebar));
     m_sidebar->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_sidebar->setSelectionMode(QAbstractItemView::SingleSelection);
     m_sidebar->setUniformItemSizes(true);
-    m_sidebar->setMinimumWidth(220);
+    m_sidebar->setFrameShape(QFrame::NoFrame);
+    m_sidebar->setMouseTracking(true);
+    m_sidebar->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_sidebar->setMinimumWidth(280);
     connect(m_sidebar->selectionModel(), &QItemSelectionModel::currentChanged, this,
             &MainWindow::onSelectionChanged);
+    sidebarLayout->addWidget(m_sidebar, 1);
 
     m_stack = new QStackedWidget(splitter);
 
     m_home = new HomePage(m_plugins, m_backend, m_stack);
     connect(m_home, &HomePage::showDisconnectedChanged, this,
             &MainWindow::onShowDisconnectedChanged);
+    connect(m_home, &HomePage::openDeviceRequested, this, [this](const QString &path) {
+        const int row = m_model->rowForDevicePath(path);
+        if (row >= 0)
+            m_sidebar->setCurrentIndex(m_model->index(row));
+    });
+    connect(m_home, &HomePage::openTelemetryRequested, this, [this] {
+        m_sidebar->setCurrentIndex(m_model->index(DeviceListModel::TelemetryRow));
+    });
     m_stack->addWidget(m_home);
 
     m_telemetry = new TelemetryPage(m_telemetryRouter, m_stack);
     m_stack->addWidget(m_telemetry);
 
-    splitter->addWidget(m_sidebar);
+    m_profiles = new ProfilesPage(m_profileStore, m_profileController, m_stack);
+    m_stack->addWidget(m_profiles);
+
+    splitter->addWidget(sidebarPanel);
     splitter->addWidget(m_stack);
     splitter->setStretchFactor(0, 0);
     splitter->setStretchFactor(1, 1);
-    splitter->setSizes({240, 860});
+    splitter->setSizes({280, 820});
 
     setCentralWidget(splitter);
     statusBar()->showMessage(tr("Ready"));
@@ -110,9 +179,12 @@ DeviceModule *MainWindow::moduleFor(const UsbDeviceInfo &device, bool offline)
     // picture there would otherwise be nothing listening.
     connect(module, &DeviceModule::statusMessage, this,
             [this](const QString &message) { statusBar()->showMessage(message, 10000); });
+    connect(module, &DeviceModule::infoFieldsChanged, this, &MainWindow::refreshHomeDevices);
 
     m_modules.insert(device.devicePath, module);
     module->start();
+    refreshProfileDevices();
+    refreshHomeDevices();
     return module;
 }
 
@@ -138,6 +210,49 @@ DeviceView *MainWindow::viewFor(const UsbDeviceInfo &device, bool offline)
     return view;
 }
 
+void MainWindow::refreshProfileDevices()
+{
+    if (m_profileController)
+        m_profileController->setDevices(m_modules.values());
+}
+
+void MainWindow::refreshHomeDevices()
+{
+    if (!m_home)
+        return;
+
+    QVector<HomeDeviceInfo> devices;
+    devices.reserve(m_modules.size());
+    for (DeviceModule *module : m_modules) {
+        // The dashboard is about hardware that is here. Offline previews stay
+        // in the sidebar, where they are a development aid rather than a fact
+        // about the machine.
+        if (module->usbDevice() && module->usbDevice()->isOffline())
+            continue;
+
+        HomeDeviceInfo info;
+        info.path = module->info().devicePath;
+        info.name = module->displayName();
+        info.family = module->familyName();
+        info.usbId = module->info().id.toString();
+        info.offline = false;
+        info.failed = !module->startError().isEmpty();
+        info.status = module->startError();
+        if (IDevice *device = module->device()) {
+            const QVector<DeviceInfoField> fields = device->infoFields();
+            if (!fields.isEmpty())
+                info.firmware = fields.first().value;
+        }
+        devices.append(info);
+    }
+
+    std::sort(devices.begin(), devices.end(),
+              [](const HomeDeviceInfo &a, const HomeDeviceInfo &b) {
+                  return a.name.localeAwareCompare(b.name) < 0;
+              });
+    m_home->setDevices(devices);
+}
+
 void MainWindow::onSelectionChanged()
 {
     const QModelIndex current = m_sidebar->currentIndex();
@@ -152,6 +267,9 @@ void MainWindow::onSelectionChanged()
         return;
     case DeviceListModel::RowKind::Telemetry:
         m_stack->setCurrentWidget(m_telemetry);
+        return;
+    case DeviceListModel::RowKind::Profiles:
+        m_stack->setCurrentWidget(m_profiles);
         return;
     case DeviceListModel::RowKind::Device:
         break;
@@ -212,12 +330,14 @@ void MainWindow::discardDevice(const QString &devicePath)
     // time if a view were ever rebuilt — which its contract forbids.
     if (DeviceModule *module = m_modules.take(devicePath))
         module->deleteLater();
+
+    refreshProfileDevices();
+    refreshHomeDevices();
 }
 
 void MainWindow::onDeviceAdded(const UsbDeviceInfo &device)
 {
     m_model->addDevice(device);
-    m_home->setDeviceCount(m_model->deviceCount());
 
     // The real thing has just replaced its placeholder in the sidebar; drop the
     // placeholder's page too, so a stale preview cannot be left on screen beside
@@ -254,7 +374,6 @@ void MainWindow::onDeviceRemoved(const QString &devicePath)
     discardDevice(devicePath);
 
     m_model->removeDevice(devicePath);
-    m_home->setDeviceCount(m_model->deviceCount());
 
     if (wasShowing)
         selectHome();

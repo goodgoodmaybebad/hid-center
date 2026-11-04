@@ -49,6 +49,10 @@ constexpr int kSwatchPx = 20;
 /// same figure as the FFB Settings page, for the same reasons.
 constexpr int kRingLightCommitMs = 250;
 
+/// A slider row long enough to aim precisely, but not so long that it runs the
+/// width of a wide page.
+constexpr int kControlRowWidth = 460;
+
 /// Every animation, in the order the combo offers them.
 constexpr std::array<LedAnimation, 4> kAnimationOrder{
     LedAnimation::Static,
@@ -195,16 +199,19 @@ void WheelbaseLedPage::buildUi()
     m_ringLight->setObjectName(QStringLiteral("ringLightToggle"));
     column->addWidget(m_ringLight);
 
-    auto *brightnessRow = new QHBoxLayout;
-    brightnessRow->addWidget(new QLabel(tr("Ring light brightness"), this));
+    auto *brightnessWidget = new QWidget(this);
+    brightnessWidget->setMaximumWidth(kControlRowWidth);
+    auto *brightnessRow = new QHBoxLayout(brightnessWidget);
+    brightnessRow->setContentsMargins(0, 0, 0, 0);
+    brightnessRow->addWidget(new QLabel(tr("Ring light brightness"), brightnessWidget));
 
     const SettingSpec *brightnessSpec = specFor(Setting::RingLightBrightness);
-    m_ringBrightness = new QSlider(Qt::Horizontal, this);
+    m_ringBrightness = new QSlider(Qt::Horizontal, brightnessWidget);
     m_ringBrightness->setObjectName(QStringLiteral("ringLightBrightness"));
     m_ringBrightness->setRange(brightnessSpec->minimum, brightnessSpec->maximum);
     brightnessRow->addWidget(m_ringBrightness, 1);
 
-    m_ringBrightnessValue = new QLabel(this);
+    m_ringBrightnessValue = new QLabel(brightnessWidget);
     m_ringBrightnessValue->setObjectName(QStringLiteral("ringLightBrightnessValue"));
     // Wide enough for "100" so the slider does not shift as the number grows.
     m_ringBrightnessValue->setMinimumWidth(
@@ -212,7 +219,7 @@ void WheelbaseLedPage::buildUi()
     m_ringBrightnessValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     brightnessRow->addWidget(m_ringBrightnessValue);
 
-    column->addLayout(brightnessRow);
+    column->addWidget(brightnessWidget);
 
     m_ringLightCommit = new QTimer(this);
     m_ringLightCommit->setSingleShot(true);
@@ -327,6 +334,7 @@ QWidget *WheelbaseLedPage::buildSection(const LedModeSpec &spec)
     // nothing to pace. A disabled slider would have said "there is a speed here
     // and you may not have it", which is not what is meant.
     section.speedRow = new QWidget(widget);
+    section.speedRow->setMaximumWidth(kControlRowWidth);
     auto *speedLayout = new QHBoxLayout(section.speedRow);
     speedLayout->setContentsMargins(0, 0, 0, 0);
     speedLayout->addWidget(new QLabel(tr("Speed"), section.speedRow));

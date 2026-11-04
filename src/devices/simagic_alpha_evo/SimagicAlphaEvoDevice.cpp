@@ -18,7 +18,74 @@
 #include "ui/WheelPage.h"
 #include "ui/WheelbaseLedPage.h"
 
+#include <QHash>
+#include <QJsonArray>
+#include <QJsonObject>
+
+#include <optional>
+
 namespace hidcenter::simagic_alpha_evo {
+namespace {
+
+/// Stable names for the settings in a profile file. The human labels are
+/// translated, so they cannot be the keys; the enum values are an
+/// implementation detail that may be reordered. These strings are the file
+/// format.
+const QHash<Setting, QString> &settingKeys()
+{
+    static const QHash<Setting, QString> keys{
+        {Setting::FfStrength, QStringLiteral("forceFeedbackStrength")},
+        {Setting::MechanicalCentering, QStringLiteral("mechanicalCentering")},
+        {Setting::MechanicalDamper, QStringLiteral("mechanicalDamper")},
+        {Setting::MechanicalFriction, QStringLiteral("mechanicalFriction")},
+        {Setting::MechanicalInertia, QStringLiteral("mechanicalInertia")},
+        {Setting::CenterDamper, QStringLiteral("centerDamper")},
+        {Setting::GameCentering, QStringLiteral("gameCentering")},
+        {Setting::GameInertia, QStringLiteral("gameInertia")},
+        {Setting::GameDamper, QStringLiteral("gameDamper")},
+        {Setting::GameFriction, QStringLiteral("gameFriction")},
+        {Setting::MaxAngle, QStringLiteral("maxAngle")},
+        {Setting::AngleLock, QStringLiteral("angleLock")},
+        {Setting::AngleLockStrength, QStringLiteral("angleLockStrength")},
+        {Setting::WheelRotationSpeed, QStringLiteral("wheelRotationSpeed")},
+        {Setting::SteeringTorqueAssist, QStringLiteral("steeringTorqueAssist")},
+        {Setting::DynamicPredictionLevel, QStringLiteral("dynamicPredictionLevel")},
+        {Setting::FeedbackDetail, QStringLiteral("feedbackDetail")},
+        {Setting::FilterLevel, QStringLiteral("filterLevel")},
+        {Setting::SlewRateControl, QStringLiteral("slewRateControl")},
+        {Setting::RingLight, QStringLiteral("ringLight")},
+        {Setting::RingLightBrightness, QStringLiteral("ringLightBrightness")},
+    };
+    return keys;
+}
+
+std::optional<Setting> settingForProfileKey(const QString &key)
+{
+    for (auto it = settingKeys().cbegin(); it != settingKeys().cend(); ++it) {
+        if (it.value() == key)
+            return it.key();
+    }
+    return std::nullopt;
+}
+
+QJsonArray pointsArray(const std::array<int, kPedalCurvePointCount> &points)
+{
+    QJsonArray array;
+    for (const int value : points)
+        array.append(value);
+    return array;
+}
+
+void readPoints(const QJsonValue &value, std::array<int, kPedalCurvePointCount> *points)
+{
+    const QJsonArray array = value.toArray();
+    if (array.size() != int(points->size()))
+        return;
+    for (int i = 0; i < array.size(); ++i)
+        (*points)[std::size_t(i)] = qBound(0, array.at(i).toInt(), 100);
+}
+
+} // namespace
 
 SimagicAlphaEvoDevice::SimagicAlphaEvoDevice(IUsbDevice *context, QString modelName, QObject *parent)
     : IDevice(parent)
@@ -132,6 +199,101 @@ QVector<DevicePage> SimagicAlphaEvoDevice::pages()
             {tr("Wheelbase LED"), new WheelbaseLedPage(m_leds, m_settings, m_probeError)},
             {tr("Wheel"), new WheelPage(m_wheelConfig, m_buttons, m_settings, m_probeError)},
             {tr("Pedals"), new PedalsPage(m_pedalInput, m_basePedals)}};
+}
+
+bool SimagicAlphaEvoDevice::captureProfile(QJsonObject *profile, QString *error) const
+{
+    if (!m_settings || !m_settings->isReady()) {
+        if (error)
+            *error = tr("The wheelbase's settings are not available yet.");
+        return false;
+    }
+
+    QJsonObject root;
+    root.insert(QStringLiteral("schema"), 1);
+
+    QJsonObject ffb;
+    for (const SettingSpec &spec : settingSpecs())
+        ffb.insert(settingKeys().value(spec.id), m_settings->value(spec.id));
+    root.insert(QStringLiteral("ffb"), ffb);
+
+    if (m_basePedals) {
+        const BasePedalController::ProfileState state = m_basePedals->profileState();
+        QJsonObject pedals;
+        pedals.insert(QStringLiteral("brakeSensor"), int(state.brakeSensor));
+        pedals.insert(QStringLiteral("brakePoints"), pointsArray(state.brakePoints));
+        pedals.insert(QStringLiteral("throttlePoints"), pointsArray(state.throttlePoints));
+        pedals.insert(QStringLiteral("brakeStart"), state.brakeStart);
+        pedals.insert(QStringLiteral("brakeEnd"), state.brakeEnd);
+        pedals.insert(QStringLiteral("throttleStart"), state.throttleStart);
+        pedals.insert(QStringLiteral("throttleEnd"), state.throttleEnd);
+        root.insert(QStringLiteral("pedals"), pedals);
+    }
+
+    if (profile)
+        *profile = root;
+    return true;
+}
+
+bool SimagicAlphaEvoDevice::applyProfile(const QJsonObject &profile, QString *error)
+{
+    if (!m_settings || !m_settings->isReady()) {
+        if (error)
+            *error = tr("The wheelbase's settings are not available yet.");
+        return false;
+    }
+
+    if (profile.value(QStringLiteral("schema")).toInt() != 1) {
+        if (error)
+            *error = tr("This profile was written by an unsupported version of HID Center.");
+        return false;
+    }
+
+    const QJsonObject ffb = profile.value(QStringLiteral("ffb")).toObject();
+    SettingValues changes;
+    for (auto it = ffb.constBegin(); it != ffb.constEnd(); ++it) {
+        const std::optional<Setting> setting = settingForProfileKey(it.key());
+        if (!setting || !it.value().isDouble())
+            continue;
+        changes.insert(*setting, clampToSpec(*setting, it.value().toInt()));
+    }
+
+    if (!changes.isEmpty()) {
+        if (m_settings->isBusy()) {
+            if (error)
+                *error = tr("A settings write is already in progress. Try again when it finishes.");
+            return false;
+        }
+        m_settings->applyAsync(changes);
+    }
+
+    if (m_basePedals) {
+        const QJsonObject pedals = profile.value(QStringLiteral("pedals")).toObject();
+        if (!pedals.isEmpty()) {
+            BasePedalController::ProfileState state = m_basePedals->profileState();
+            if (pedals.contains(QStringLiteral("brakeSensor")))
+                state.brakeSensor = PedalBrakeSensor(
+                    qBound(0, pedals.value(QStringLiteral("brakeSensor")).toInt(), 1));
+            readPoints(pedals.value(QStringLiteral("brakePoints")), &state.brakePoints);
+            readPoints(pedals.value(QStringLiteral("throttlePoints")),
+                       &state.throttlePoints);
+            if (pedals.contains(QStringLiteral("brakeStart")))
+                state.brakeStart = qBound(0, pedals.value(QStringLiteral("brakeStart")).toInt(), 99);
+            if (pedals.contains(QStringLiteral("brakeEnd")))
+                state.brakeEnd = qBound(0, pedals.value(QStringLiteral("brakeEnd")).toInt(), 100);
+            if (pedals.contains(QStringLiteral("throttleStart")))
+                state.throttleStart =
+                    qBound(0, pedals.value(QStringLiteral("throttleStart")).toInt(), 99);
+            if (pedals.contains(QStringLiteral("throttleEnd")))
+                state.throttleEnd =
+                    qBound(0, pedals.value(QStringLiteral("throttleEnd")).toInt(), 100);
+            m_basePedals->setProfileState(state);
+        }
+    }
+
+    if (error)
+        error->clear();
+    return true;
 }
 
 } // namespace hidcenter::simagic_alpha_evo

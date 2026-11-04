@@ -19,6 +19,9 @@ class DeviceView;
 class HomePage;
 class IUsbBackend;
 class PluginManager;
+class ProfileController;
+class ProfileStore;
+class ProfilesPage;
 class TelemetryPage;
 class TelemetryRouter;
 
@@ -66,6 +69,12 @@ private:
     /// afterwards so a running capture survives switching away and back.
     DeviceView *viewFor(const UsbDeviceInfo &device, bool offline);
 
+    /// Keep the profile page's device list in step with the live modules.
+    void refreshProfileDevices();
+
+    /// Rebuild the dashboard's device cards from the live modules.
+    void refreshHomeDevices();
+
     PluginManager *m_plugins = nullptr;
     IUsbBackend *m_backend = nullptr;
     TelemetryRouter *m_telemetryRouter = nullptr;
@@ -75,6 +84,10 @@ private:
     QStackedWidget *m_stack = nullptr;
     HomePage *m_home = nullptr;
     TelemetryPage *m_telemetry = nullptr;
+    ProfilesPage *m_profiles = nullptr;
+
+    ProfileStore *m_profileStore = nullptr;
+    ProfileController *m_profileController = nullptr;
 
     /// One per device we can see, alive from detection to unplug. Views come and
     /// go against these, never the other way round.

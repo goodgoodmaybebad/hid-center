@@ -29,6 +29,11 @@ constexpr int kPositionSegments = 40;
 /// Room at each end of the slider for its "0 %" and "100 %".
 constexpr int kSliderLabelWidth = 40;
 
+/// Clearance between a slider handle at either end and the number beside it.
+/// Half of this is the handle's own radius; the rest is breathing room so a
+/// handle sitting at 0 % or 100 % never touches the label.
+constexpr int kSliderLabelGap = 10;
+
 /// How far from a handle or a dot a press still takes it, in pixels.
 constexpr qreal kGrabDistance = 12.0;
 
@@ -97,9 +102,12 @@ QRectF PedalCurveEditor::positionRect() const
 
 QRectF PedalCurveEditor::sliderRect() const
 {
-    // Between its two labels, below the graph.
-    return QRectF(kMargin + kSliderLabelWidth, height() - kMargin - kSliderHeight,
-                  width() - 2 * (kMargin + kSliderLabelWidth), kSliderHeight);
+    // Between its two labels, with a handle's width and a gap at each end so a
+    // handle at the extreme of the range clears the number rather than sitting
+    // on top of it.
+    const qreal inset = kSliderLabelWidth + kHandleRadius + kSliderLabelGap;
+    return QRectF(kMargin + inset, height() - kMargin - kSliderHeight,
+                  width() - 2 * (kMargin + inset), kSliderHeight);
 }
 
 QRectF PedalCurveEditor::graphRect() const
@@ -207,9 +215,10 @@ void PedalCurveEditor::paintEvent(QPaintEvent *event)
     // handles in the accent, and a handle at each end.
     const QRectF slider = sliderRect();
     painter.setPen(text);
-    painter.drawText(QRectF(kMargin, slider.top(), kSliderLabelWidth - 6, slider.height()),
+    painter.drawText(QRectF(kMargin, slider.top(), kSliderLabelWidth, slider.height()),
                      Qt::AlignRight | Qt::AlignVCenter, tr("0 %"));
-    painter.drawText(QRectF(slider.right() + 6, slider.top(), kSliderLabelWidth, slider.height()),
+    painter.drawText(QRectF(slider.right() + kHandleRadius + kSliderLabelGap, slider.top(),
+                            kSliderLabelWidth, slider.height()),
                      Qt::AlignLeft | Qt::AlignVCenter, tr("100 %"));
     const qreal trackY = slider.center().y();
     painter.setPen(QPen(mid, 3.0, Qt::SolidLine, Qt::RoundCap));
@@ -266,29 +275,73 @@ void PedalCurveEditor::paintEvent(QPaintEvent *event)
     for (int i = 0; i < 3; ++i)
         painter.drawEllipse(pointAt(i), kDotRadius, kDotRadius);
 
-    // The dragged value, beside what is being dragged.
-    if (m_grab != Grab::None) {
-        QString label;
-        QPointF at;
-        switch (m_grab) {
-        case Grab::Start:
-            label = tr("%1 %").arg(m_start);
-            at = QPointF(xOf(m_start, slider), slider.top() - 10);
-            break;
-        case Grab::End:
-            label = tr("%1 %").arg(m_end);
-            at = QPointF(xOf(m_end, slider), slider.top() - 10);
-            break;
-        default: {
-            const int index = int(m_grab) - int(Grab::Point0);
-            label = tr("%1 %").arg(m_points[std::size_t(index)]);
-            at = pointAt(index) + QPointF(0, -14);
-            break;
-        }
-        }
-        painter.setPen(text);
-        const QRectF box(at.x() - 30, at.y() - 8, 60, 16);
-        painter.drawText(box, Qt::AlignCenter, label);
+    // The value of each point, always visible in a small pill beside its dot.
+    // It replaces the plain label that used to appear only during a drag: the
+    // numbers matter while reading the curve, not only while changing it.
+    QFont pillFont = font();
+    if (pillFont.pointSizeF() > 0.0)
+        pillFont.setPointSizeF(qMax(6.5, pillFont.pointSizeF() * 0.8));
+    else
+        pillFont.setPixelSize(qMax(9, int(pillFont.pixelSize() * 0.8)));
+    pillFont.setWeight(QFont::DemiBold);
+    const QFontMetricsF pillMetrics(pillFont);
+
+    painter.setFont(pillFont);
+    for (int i = 0; i < 3; ++i) {
+        const QPointF point = pointAt(i);
+        const QString label = tr("%1 %").arg(m_points[std::size_t(i)]);
+        const qreal pillWidth = pillMetrics.horizontalAdvance(label) + 12.0;
+        const qreal pillHeight = pillMetrics.height() + 6.0;
+        const qreal gap = kDotRadius + 8.0;
+
+        qreal top = point.y() - gap - pillHeight;
+        if (top < graph.top() + 2.0)
+            top = point.y() + gap;
+        top = qBound(graph.top() + 2.0, top, graph.bottom() - pillHeight - 2.0);
+
+        qreal left = point.x() - pillWidth / 2.0;
+        left = qBound(graph.left() + 2.0, left, graph.right() - pillWidth - 2.0);
+        const QRectF pill(left, top, pillWidth, pillHeight);
+
+        const bool active =
+            m_grab == Grab(int(Grab::Point0) + i);
+        QColor fill = accent;
+        fill.setAlphaF(active ? 0.32 : 0.16);
+        QColor border = accent;
+        border.setAlphaF(active ? 0.8 : 0.5);
+
+        painter.setPen(QPen(border, 1.0));
+        painter.setBrush(fill);
+        painter.drawRoundedRect(pill, pillHeight / 2.0, pillHeight / 2.0);
+
+        painter.setPen(accent);
+        painter.drawText(pill, Qt::AlignCenter, label);
+    }
+
+    // The range handles still need their value while being dragged; the pills
+    // above are for the curve's points, which are always visible.
+    if (m_grab == Grab::Start || m_grab == Grab::End) {
+        const int value = m_grab == Grab::Start ? m_start : m_end;
+        const QString label = tr("%1 %").arg(value);
+        const qreal pillWidth = pillMetrics.horizontalAdvance(label) + 12.0;
+        const qreal pillHeight = pillMetrics.height() + 6.0;
+        const qreal centre = xOf(value, slider);
+        const qreal left = qBound(qreal(kMargin), centre - pillWidth / 2.0,
+                                  width() - kMargin - pillWidth);
+        const qreal top = qBound(qreal(kMargin), slider.top() - pillHeight - 2.0,
+                                 height() - kMargin - pillHeight);
+        const QRectF pill(left, top, pillWidth, pillHeight);
+
+        QColor fill = accent;
+        fill.setAlphaF(0.32);
+        QColor border = accent;
+        border.setAlphaF(0.8);
+
+        painter.setPen(QPen(border, 1.0));
+        painter.setBrush(fill);
+        painter.drawRoundedRect(pill, pillHeight / 2.0, pillHeight / 2.0);
+        painter.setPen(accent);
+        painter.drawText(pill, Qt::AlignCenter, label);
     }
 }
 

@@ -15,6 +15,16 @@ qt_add_executable(hid-center
     HomePage.h
     InterfaceScale.cpp
     InterfaceScale.h
+    ProfileController.cpp
+    ProfileController.h
+    ProfileStore.cpp
+    ProfileStore.h
+    ProfilesPage.cpp
+    ProfilesPage.h
+    SidebarDelegate.cpp
+    SidebarDelegate.h
+    Theme.cpp
+    Theme.h
     AnalyzerTab.cpp
     AnalyzerTab.h
     LogPanel.cpp
@@ -44,7 +54,9 @@ qt_add_executable(hid-center
 qt_add_resources(hid-center hid-center-resources
     PREFIX "/icons"
     BASE "${PROJECT_SOURCE_DIR}/resources"
-    FILES "${PROJECT_SOURCE_DIR}/resources/hid-center.svg")
+    FILES "${PROJECT_SOURCE_DIR}/resources/hid-center.svg"
+          "${PROJECT_SOURCE_DIR}/resources/chevron-down.svg"
+          "${PROJECT_SOURCE_DIR}/resources/chevron-up.svg")
 
 target_link_libraries(hid-center PRIVATE hidcenter-core Qt6::Widgets)
 

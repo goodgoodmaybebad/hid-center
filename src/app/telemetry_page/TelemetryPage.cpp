@@ -9,6 +9,7 @@
 #include "app/telemetry_page/TelemetryWindow.h"
 #include "core/telemetry/TelemetryHub.h"
 
+#include <QFont>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QTabWidget>
@@ -21,6 +22,8 @@ TelemetryPage::TelemetryPage(TelemetryRouter *router, QWidget *parent)
     , m_router(router)
 {
     auto *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(18, 14, 18, 16);
+    layout->setSpacing(12);
 
     buildHeader(layout);
 
@@ -46,11 +49,13 @@ void TelemetryPage::buildHeader(QVBoxLayout *layout)
     // Shaped after DeviceView's header, down to the margins and the 1.3× title,
     // so a device page and this one read as the same application.
     auto *header = new QHBoxLayout;
-    header->setContentsMargins(8, 6, 8, 6);
+    header->setContentsMargins(4, 2, 4, 2);
+    header->setSpacing(10);
 
-    auto *title = new QLabel(QStringLiteral("<b>%1</b>").arg(tr("Telemetry")), this);
+    auto *title = new QLabel(tr("Telemetry"), this);
     QFont titleFont = title->font();
-    titleFont.setPointSizeF(titleFont.pointSizeF() * 1.3);
+    titleFont.setPointSizeF(titleFont.pointSizeF() * 1.45);
+    titleFont.setWeight(QFont::DemiBold);
     title->setFont(titleFont);
     header->addWidget(title);
 
