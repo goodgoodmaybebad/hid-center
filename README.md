@@ -4,12 +4,17 @@ A Qt desktop application for configuring USB HID sim-racing hardware:
 force-feedback settings on a direct-drive wheelbase, response curves and
 calibration for pedals, wheel LED modes, and live telemetry-driven effects.
 
+> **Fork note:** the hardware work in this fork targets the SIMAGIC Alpha Evo and
+> a P1000 pedal set connected to its base. The SIMSONN Plus X module is inherited
+> from the original project and has not been verified here.
+
 ## Features
 
 - Configure force feedback, rotation, signal and LED settings on SIMAGIC Alpha
   Evo wheelbases.
-- Edit pedal curves and ranges, calibrate pedals on the base, and configure
-  SIMSONN Plus X pedal settings.
+- Edit pedal curves and ranges, and calibrate the pedals connected to a SIMAGIC
+  base. The pedal work in this fork has been developed against a SIMAGIC P1000
+  set.
 - Set wheel LED colours and modes, including RPM lights.
 - Follow telemetry from rFactor 2 and Le Mans Ultimate. A test mode lets the
   telemetry-driven parts of the interface and the devices be used without a sim
@@ -27,7 +32,8 @@ Settings can be saved as named profiles from the **Profiles** page, applied to a
 matching device, duplicated, and exported or imported as JSON. A profile can also
 be associated with a telemetry source; when that source starts sending, its
 profile is applied automatically. Profiles currently cover force feedback and the
-pedals on a SIMAGIC base, and the pedal settings on SIMSONN pedals.
+pedals on a SIMAGIC base. The inherited SIMSONN module also exposes profile data,
+but that hardware has not been verified in this fork.
 
 ## Telemetry
 
@@ -40,12 +46,12 @@ hand. Device modules and profiles consume the same shared frame.
 
 ## Supported devices
 
-| Device | VID:PID |
-| --- | --- |
-| SIMAGIC Alpha Evo | `3670:0500` |
-| SIMAGIC Alpha Evo | `3670:0501` |
-| SIMAGIC Alpha Evo | `3670:0502` |
-| SIMSONN Plus X | `ddfd:6011` |
+| Device | VID:PID | Notes |
+| --- | --- | --- |
+| SIMAGIC Alpha Evo | `3670:0500` | Tested with a P1000 pedal set on the base. |
+| SIMAGIC Alpha Evo | `3670:0501` | Same module as `3670:0500`. |
+| SIMAGIC Alpha Evo | `3670:0502` | Same module as `3670:0500`. |
+| SIMSONN Plus X | `ddfd:6011` | Inherited from the original project; not verified in this fork. |
 
 ## Building
 
