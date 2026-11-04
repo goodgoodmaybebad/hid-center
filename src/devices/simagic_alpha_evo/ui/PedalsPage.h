@@ -6,16 +6,12 @@
 #include <QPointer>
 #include <QWidget>
 
-#include <array>
-
 class QCheckBox;
 class QComboBox;
-class QFormLayout;
 class QGroupBox;
 class QLabel;
 class QProgressBar;
 class QPushButton;
-class QSpinBox;
 
 namespace hidcenter::simagic_alpha_evo {
 
@@ -51,16 +47,12 @@ protected:
     void hideEvent(QHideEvent *event) override;
 
 private:
-    /// One pedal's settings controls: the graph to drag, and boxes for exact
-    /// values beneath it.
+    /// One pedal's settings controls: the curve choice and the graph to drag.
     struct PedalControls
     {
         int group = 0;
         QComboBox *curve = nullptr;
         PedalCurveEditor *editor = nullptr;
-        std::array<QSpinBox *, 3> points{};
-        QSpinBox *rangeStart = nullptr;
-        QSpinBox *rangeEnd = nullptr;
     };
 
     void showPedals();
@@ -69,8 +61,8 @@ private:
     /// The settings box: build it, fill it from the controller, and enable
     /// what may be changed.
     QGroupBox *makeSettingsBox();
-    /// A pedal's panel: `extra` first, if any, then its curve, the graph, its
-    /// points and its range. `name` starts each control's object name.
+    /// A pedal's panel: `extra` first, if any, then its curve and graph.
+    /// `name` starts each control's object name.
     QGroupBox *makePedalPanel(PedalControls &controls, const QString &title,
                               const QString &name, QWidget *extra, QWidget *parent);
     void connectPedal(const PedalControls &controls);

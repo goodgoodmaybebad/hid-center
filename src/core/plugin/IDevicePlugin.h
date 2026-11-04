@@ -30,6 +30,7 @@ namespace hidcenter {
 ///    nested member and an endpoint list added beside it.
 /// 8: `access` moved out of the HID half of the interface struct onto the
 ///    interface itself, and deviceAccessFor() went away.
+/// 9: IDevice gained the optional profile snapshot/apply methods.
 ///
 /// Each of these changes a vtable a module may already hold a pointer into, so
 /// modules built against an older value must be rebuilt rather than loaded. 4 is
@@ -39,7 +40,7 @@ namespace hidcenter {
 /// fields in a struct passed across the boundary, so an older module would read
 /// the wrong bytes for everything after them. 7 does both at once. 8 is 5 and 6
 /// again: a field moved.
-inline constexpr int kDevicePluginAbiVersion = 8;
+inline constexpr int kDevicePluginAbiVersion = 9;
 
 /// A device *family* module.
 ///

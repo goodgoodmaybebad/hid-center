@@ -27,6 +27,11 @@ namespace {
 /// presses, short enough to feel immediate.
 constexpr int kCommitDebounceMs = 250;
 
+/// How wide a slider-and-spin-box row is allowed to get. A slider that fills a
+/// whole wide column is awkward to aim with; this keeps it long enough for fine
+/// control without letting it run the width of the page.
+constexpr int kControlRowWidth = 460;
+
 } // namespace
 
 int MainSettingsPage::Control::value() const
@@ -273,6 +278,8 @@ void MainSettingsPage::addControl(QFormLayout *form, QWidget *parent, Setting se
 void MainSettingsPage::addSlider(QFormLayout *form, QWidget *parent, const SettingSpec &spec)
 {
     auto *row = new QWidget(parent);
+    row->setMaximumWidth(kControlRowWidth);
+    row->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     auto *rowLayout = new QHBoxLayout(row);
     rowLayout->setContentsMargins(0, 0, 0, 0);
 

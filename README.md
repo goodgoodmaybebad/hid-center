@@ -7,6 +7,14 @@ It also picks up telemetry from running sims.
 
 > **Note:** a telemetry plugin for Le Mans Ultimate (LMU) is coming soon.
 
+## Profiles
+
+Settings can be saved as named profiles from the **Profiles** page, applied to a
+matching device, duplicated, and exported or imported as JSON. A profile can also
+be associated with a telemetry source; when that source starts sending, its
+profile is applied automatically. Profiles currently cover force feedback and the
+pedals on a SIMAGIC base, and the pedal settings on SIMSONN pedals.
+
 ![HID Center showing the FFB settings of a SIMAGIC Alpha Evo](docs/screenshot.png)
 
 ## Supported devices

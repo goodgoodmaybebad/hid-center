@@ -21,19 +21,23 @@ class DeviceListModel : public QAbstractListModel
 
 public:
     /// What a row stands for. Position alone used to be enough, when Home was
-    /// the only thing that was not a device; with two fixed rows and two kinds
+    /// the only thing that was not a device; with three fixed rows and two kinds
     /// of device row it is worth naming.
-    enum class RowKind { Home, Telemetry, Device };
+    enum class RowKind { Home, Telemetry, Profiles, Device };
 
     static constexpr int HomeRow = 0;
     static constexpr int TelemetryRow = 1;
+    static constexpr int ProfilesRow = 2;
 
     /// Rows before the first device. Everything that maps a row to a device goes
-    /// through this rather than through a literal 1.
-    static constexpr int FixedRows = 2;
+    /// through this rather than through a literal.
+    static constexpr int FixedRows = 3;
 
     static constexpr int DevicePathRole = Qt::UserRole + 1;
     static constexpr int RowKindRole = Qt::UserRole + 2;
+    /// A second, dimmer line under the name — the USB id for a device row, and
+    /// empty for the application's own pages.
+    static constexpr int SecondaryTextRole = Qt::UserRole + 3;
 
     explicit DeviceListModel(PluginManager *plugins, QObject *parent = nullptr);
 

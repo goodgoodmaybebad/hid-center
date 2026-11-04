@@ -18,6 +18,13 @@
 #include <QVBoxLayout>
 
 namespace hidcenter::simagic_alpha_evo {
+namespace {
+
+/// A slider row long enough to aim precisely, but not so long that it runs the
+/// width of a wide page.
+constexpr int kControlRowWidth = 460;
+
+} // namespace
 
 TelemetryPage::TelemetryPage(AlphaEvoTelemetry *telemetry, AlphaEvoSettings *settings,
                              QWidget *parent)
@@ -48,6 +55,8 @@ TelemetryPage::TelemetryPage(AlphaEvoTelemetry *telemetry, AlphaEvoSettings *set
     auto *rateForm = new QFormLayout(rateBox);
 
     auto *rateRow = new QWidget(rateBox);
+    rateRow->setMaximumWidth(kControlRowWidth);
+    rateRow->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     auto *rateLayout = new QHBoxLayout(rateRow);
     rateLayout->setContentsMargins(0, 0, 0, 0);
 

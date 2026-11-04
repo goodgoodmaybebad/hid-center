@@ -51,6 +51,8 @@ DeviceListModel::RowKind DeviceListModel::kindAt(int row) const
         return RowKind::Home;
     case TelemetryRow:
         return RowKind::Telemetry;
+    case ProfilesRow:
+        return RowKind::Profiles;
     default:
         return RowKind::Device;
     }
@@ -105,6 +107,8 @@ QVariant DeviceListModel::data(const QModelIndex &index, int role) const
             return tr("Home");
         case RowKind::Telemetry:
             return tr("Telemetry");
+        case RowKind::Profiles:
+            return tr("Profiles");
         case RowKind::Device:
             break;
         }
@@ -118,6 +122,8 @@ QVariant DeviceListModel::data(const QModelIndex &index, int role) const
                 return style->standardIcon(QStyle::SP_DirHomeIcon);
             case RowKind::Telemetry:
                 return style->standardIcon(QStyle::SP_ComputerIcon);
+            case RowKind::Profiles:
+                return style->standardIcon(QStyle::SP_FileDialogDetailedView);
             case RowKind::Device:
                 break;
             }
@@ -134,6 +140,8 @@ QVariant DeviceListModel::data(const QModelIndex &index, int role) const
             return tr("Overview and diagnostics");
         case RowKind::Telemetry:
             return tr("Sim telemetry shared with every device module");
+        case RowKind::Profiles:
+            return tr("Named settings snapshots, and the games that switch them");
         case RowKind::Device:
             break;
         }
@@ -158,6 +166,13 @@ QVariant DeviceListModel::data(const QModelIndex &index, int role) const
 
     case RowKindRole:
         return int(kind);
+
+    case SecondaryTextRole: {
+        if (kind != RowKind::Device)
+            return {};
+        const UsbDeviceInfo *info = deviceAt(index.row());
+        return info ? info->id.toString() : QString();
+    }
 
     case DevicePathRole: {
         const UsbDeviceInfo *info = deviceAt(index.row());
@@ -253,13 +268,14 @@ void DeviceListModel::rebuildOfflineRows()
                 info.product =
                     plugin.plugin ? plugin.plugin->displayNameFor(info) : plugin.familyName;
 
-                // The id goes in the label rather than being left to relabel()'s
-                // serial-or-#N disambiguation: a family commonly claims several
-                // ids under one product name, and neither a serial nor an index
-                // says anything about hardware that is not there.
+                // The product is the first line and the id the second, drawn by
+                // the sidebar's delegate. A family commonly claims several ids
+                // under one product name, and neither a serial nor an index says
+                // anything about hardware that is not there — the id line is
+                // what tells those placeholders apart.
                 Entry entry;
                 entry.info = info;
-                entry.label = tr("%1 (%2, offline)").arg(info.product, id.toString());
+                entry.label = info.product.isEmpty() ? id.toString() : info.product;
                 wanted.append(entry);
             }
         }

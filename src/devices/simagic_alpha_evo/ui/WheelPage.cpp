@@ -42,6 +42,10 @@ namespace {
 constexpr int kPickNoWheel = -1;
 constexpr int kPickUnknownWheel = -2;
 
+/// A slider row long enough to aim precisely, but not so long that it runs the
+/// width of a wide page.
+constexpr int kControlRowWidth = 460;
+
 } // namespace
 
 WheelPage::WheelPage(WheelConfigController *wheel, AlphaEvoButtonInput *buttons,
@@ -174,22 +178,25 @@ WheelPage::WheelPage(WheelConfigController *wheel, AlphaEvoButtonInput *buttons,
         m_wheel ? m_wheel->ledBrightness() : m_schematic->ledBrightness();
     m_schematic->setLedBrightness(initialBrightness);
 
-    auto *brightnessRow = new QHBoxLayout;
-    auto *brightness = new QSlider(Qt::Horizontal, leds);
+    auto *brightnessRowWidget = new QWidget(leds);
+    brightnessRowWidget->setMaximumWidth(kControlRowWidth);
+    auto *brightnessRow = new QHBoxLayout(brightnessRowWidget);
+    brightnessRow->setContentsMargins(0, 0, 0, 0);
+    auto *brightness = new QSlider(Qt::Horizontal, brightnessRowWidget);
     brightness->setObjectName(QStringLiteral("ledBrightness"));
     brightness->setRange(0, kWheelLedBrightnessMax);
     brightness->setValue(initialBrightness);
     brightness->setMinimumWidth(140);
     brightnessRow->addWidget(brightness, 1);
 
-    auto *brightnessValue = new QSpinBox(leds);
+    auto *brightnessValue = new QSpinBox(brightnessRowWidget);
     brightnessValue->setObjectName(QStringLiteral("ledBrightnessValue"));
     brightnessValue->setRange(0, kWheelLedBrightnessMax);
     brightnessValue->setValue(initialBrightness);
     // Typing 35 would otherwise send 3 to the wheel on the way.
     brightnessValue->setKeyboardTracking(false);
     brightnessRow->addWidget(brightnessValue);
-    ledsLayout->addLayout(brightnessRow);
+    ledsLayout->addWidget(brightnessRowWidget);
 
     column->addWidget(leds);
 

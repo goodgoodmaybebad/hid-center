@@ -239,6 +239,47 @@ void BasePedalController::setRange(int group, int startPercent, int endPercent)
     change(next);
 }
 
+BasePedalController::ProfileState BasePedalController::profileState() const
+{
+    ProfileState state;
+    state.brakeSensor = brakeSensor();
+    state.brakePoints = curvePointsOf(kPedalBrakeGroup);
+    state.throttlePoints = curvePointsOf(kPedalThrottleGroup);
+    state.brakeStart = rangeStartOf(kPedalBrakeGroup);
+    state.brakeEnd = rangeEndOf(kPedalBrakeGroup);
+    state.throttleStart = rangeStartOf(kPedalThrottleGroup);
+    state.throttleEnd = rangeEndOf(kPedalThrottleGroup);
+    return state;
+}
+
+void BasePedalController::setProfileState(const ProfileState &state)
+{
+    PedalSettings next = m_pedals;
+    next.brakeSensor = state.brakeSensor;
+
+    const auto apply = [&next](int group,
+                               const std::array<int, kPedalCurvePointCount> &points,
+                               int startPercent, int endPercent) {
+        PedalGroup &pedal = next.groups[std::size_t(group)];
+        int below = 0;
+        for (int i = 0; i < kPedalCurvePointCount; ++i) {
+            const int percent = qBound(below, points[std::size_t(i)], 100);
+            below = percent;
+            pedal[std::size_t(kPedalCurveFirstIndex + i)] =
+                quint16(pedalCurveValue(percent));
+        }
+        const int start = qBound(0, startPercent, 99);
+        const int end = qBound(start + 1, endPercent, 100);
+        pedal[std::size_t(kPedalRangeStartIndex)] = quint16(pedalRangeValue(start));
+        pedal[std::size_t(kPedalRangeEndIndex)] = quint16(pedalRangeValue(end));
+    };
+
+    apply(kPedalBrakeGroup, state.brakePoints, state.brakeStart, state.brakeEnd);
+    apply(kPedalThrottleGroup, state.throttlePoints, state.throttleStart,
+          state.throttleEnd);
+    change(next);
+}
+
 bool BasePedalController::isSending() const
 {
     return m_pace->isActive();
