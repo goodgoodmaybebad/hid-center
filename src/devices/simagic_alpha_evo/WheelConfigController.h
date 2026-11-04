@@ -7,8 +7,10 @@
 #include <QHash>
 #include <QList>
 #include <QObject>
+#include <QSet>
 #include <QString>
 
+#include <array>
 #include <optional>
 
 #include "AlphaEvoWheelConfig.h"
@@ -35,13 +37,22 @@ enum class WheelModel;
 /// app agree is for the app to say it: once when the base is detected, whether
 /// or not the tab is ever opened, and again on every change.
 ///
-/// **Only the brightness and the clutch paddles go to every wheel.** The block
-/// this module sends around what it sets is a GTC's (see defaultWheelConfig()),
-/// and which byte means what differs from wheel to wheel. So everything else is
-/// sent only while the base reports a GTC. For any other wheel the colours are
-/// kept and drawn but not sent, and the rest is not offered at all. The
-/// brightness and the clutch bytes are in the last report, which goes to every
-/// wheel, since it is the one that applies the block.
+/// **Nothing goes to a wheel this module does not know.** The block it sends
+/// around what it sets is a GTC's (see defaultWheelConfig()), and which byte
+/// means what differs from wheel to wheel. The last report, which holds the
+/// brightness and the clutch bytes, makes the wheel apply the other three as it
+/// holds them, and sent alone to a GT Neo it left every input on button 1. So
+/// the block, whole, goes only to a wheel whose button mappings are known:
+/// wheelMappingsKnown(), a GTC or a GT Neo. Nor does anything go to one the user
+/// has left to SIMAGIC's software (managedElsewhere()), which keeps what that
+/// software set on it, LEDs and all.
+///
+/// **Each of those has its own button mappings**, kept apart and put into the
+/// block for the wheel on the base. A GT Neo is sent its own block otherwise,
+/// as SimPro sent it (gtNeoWheelConfig()), so its LEDs and RPM lights are
+/// SimPro's defaults; a GTC is sent the GTC's. Both have their RPM lights
+/// offered to change. Only a GTC has its button colours and triggers, and on a
+/// GT Neo the colours are kept and drawn but not sent.
 class WheelConfigController : public QObject
 {
     Q_OBJECT
@@ -100,13 +111,15 @@ public:
     void setControlTrigger(WheelModel model, const QString &key, int trigger);
 
     /// The joystick button one action of a control presses, from 1: `action` is
-    /// an index into wheelControlActions(), 0 for a button. Only for a GTC
-    /// control whose input for that action is known, and nothing for any other.
+    /// an index into wheelControlActions(), 0 for a button. Only for a control
+    /// of a wheel whose mappings are known (wheelMappingsKnown()) and whose input
+    /// for that action is known, and nothing for any other.
     std::optional<int> controlButton(WheelModel model, const QString &key, int action) const;
 
     /// Make one action of a control press joystick button `button`, 1 to
     /// kWheelButtonMax, and keep it. Ignored for an action controlButton() has
-    /// nothing for, or a button out of that range. Sent as the colours are.
+    /// nothing for, or a button out of that range. Sent as the colours are while
+    /// that wheel is on the base, and kept for when it is otherwise.
     void setControlButton(WheelModel model, const QString &key, int action, int button);
 
     /// One action of one of the layout's controls.
@@ -123,45 +136,59 @@ public:
         QList<SharedAction> controls;
 
         /// How many of the wheel's inputs with no control in the layout press
-        /// it: on a GTC, the shift paddles, which the layout gives no input.
+        /// it: the shift paddles, which no layout gives an input.
         int otherInputs = 0;
 
         bool isEmpty() const { return controls.isEmpty() && otherInputs == 0; }
     };
 
-    /// Every input of a GTC but the one of control `key`'s `action` that presses
+    /// Every input of the wheel but the one of control `key`'s `action` that presses
     /// `button`, as the block has them now, the same control's other actions
     /// included. Empty for an action controlButton() has nothing for.
     ButtonSharing buttonSharing(WheelModel model, const QString &key, int action,
                                 int button) const;
 
-    /// A GTC's RPM lights as the block has them, lowest percentage first, with
-    /// as many LEDs as its layout draws. Nothing for any other wheel.
+    /// A GTC's or GT Neo's RPM lights as its block has them, lowest percentage
+    /// first, with as many LEDs as its layout draws. Nothing for any other wheel.
     std::optional<RpmLights> rpmLights(WheelModel model) const;
 
-    /// Set a GTC's RPM lights, and keep them. Each percentage is held to 0–100
-    /// and to no less than the one before, and LEDs past the layout's are
-    /// ignored, as is anything past the tenth pattern. Ignored for any other
-    /// wheel. Sent as the colours are.
+    /// Set a GTC's or GT Neo's RPM lights, and keep them. Each percentage is
+    /// held to 0–100 and to no less than the one before, and LEDs past the
+    /// layout's are ignored, as is anything past the tenth pattern. Ignored for
+    /// any other wheel. Sent as the colours are while that wheel is on the base.
     void setRpmLights(WheelModel model, const RpmLights &lights);
 
     /// The wheel id the base last reported, 0 for none or before it has said.
     int attachedWheelId() const { return m_attachedWheelId; }
 
-    /// Whether a change to a GTC's settings, everything but the brightness,
-    /// reaches the wheel now: while the base reports one, or offline, where it
-    /// is logged instead of sent.
+    /// Whether a change to the block reaches the wheel now: while the base
+    /// reports a wheel whose mappings are known and that is not left to
+    /// SIMAGIC's software, or offline, where it is logged instead of sent.
     bool sendsWheelSettings() const;
 
+    /// Whether wheel `wheelId` is left to SIMAGIC's software: nothing at all is
+    /// sent to it, so what that software set, such as its LEDs, stays. Kept
+    /// between runs, per wheel id. Off unless the user turns it on.
+    bool managedElsewhere(int wheelId) const { return m_managedElsewhere.contains(wheelId); }
+
+    /// Turn it on or off, and keep it. Turned off with that wheel on the base,
+    /// the whole block is sent, as when the wheel first appears, which replaces
+    /// whatever the other software set.
+    void setManagedElsewhere(int wheelId, bool managed);
+
 public Q_SLOTS:
-    /// Look at which wheel the base reports, and when that has changed, say so
-    /// and send a GTC its colours. Called on every base status refresh, and once
-    /// by the device after the probe, which fills in the status without saying.
+    /// Look at which wheel the base reports, and when that has changed, say so,
+    /// put its mappings in the block and, for a known wheel, send it the block.
+    /// Called on every base status refresh, and once by the device after the
+    /// probe, which fills in the status without saying.
     void refreshAttachedWheel();
 
 Q_SIGNALS:
     /// The base reports another wheel than it did, or none.
     void attachedWheelChanged();
+
+    /// A wheel was left to SIMAGIC's software, or taken back.
+    void managedElsewhereChanged(int wheelId);
 
 private Q_SLOTS:
     void flushPending();
@@ -172,36 +199,78 @@ private:
     /// laid out for. Null for another wheel, or a key it does not have.
     const WheelControl *blockControl(WheelModel model, const QString &key) const;
 
-    /// The wheel input of one of a blockControl()'s actions, or -1 when there is
+    /// A control of a model's wheel, when that wheel's mappings are known. Null
+    /// for another wheel, or a key it does not have.
+    const WheelControl *mappedControl(WheelModel model, const QString &key) const;
+
+    /// The wheel input of one of a mappedControl()'s actions, or -1 when there is
     /// no such control, action, or known input.
     int controlInput(WheelModel model, const QString &key, int action) const;
+
+    /// The wheel whose mappings are in the block: the one on the base if its
+    /// mappings are known, and otherwise the GTC the block was captured from.
+    int mappingsWheelId() const;
+
+    /// Copy mappingsWheelId()'s mappings into the block.
+    void putMappingsInBlock();
+
+    /// The block a wheel's RPM lights are kept in: m_config for a GTC,
+    /// m_gtNeoBlock for a GT Neo. Null for any other wheel.
+    WheelConfig *rpmBlock(int wheelId);
+    const WheelConfig *rpmBlock(int wheelId) const;
+
+    /// Whether a change to rpmBlock(`wheelId`) reaches the wheel now: that
+    /// block is the one outgoingBlock() sends from, and something is sent.
+    bool sendsBlockOf(int wheelId) const;
 
     /// Mark every report where the block now differs from `before`, and send
     /// them now if the wheel has not been updated for the pacing interval, or
     /// else when that is over.
     void scheduleChanges(const WheelConfig &before);
 
+    /// The same for any block: every report where `after` differs from
+    /// `before`.
+    void scheduleChanges(const WheelConfig &before, const WheelConfig &after);
+
     /// Send the reports in `chunks`, a bit per report, followed by the one that
     /// makes the wheel apply them. See kWheelConfigApplyChunk.
     void push(quint8 chunks);
 
+    /// The block as the wheel on the base is sent it: m_config, but for a GT
+    /// Neo, its own block with m_config's mappings, brightness and clutch bytes.
+    WheelConfig outgoingBlock() const;
+
     AlphaEvoSettings *m_settings = nullptr;
     UsbDeviceInfo m_info;
     WheelConfig m_config;
+
+    /// What a GT Neo is sent, but for the parts outgoingBlock() takes from
+    /// m_config: SimPro's block for it, LEDs and RPM lights.
+    WheelConfig m_gtNeoBlock;
 
     /// What the user has picked, by wheel id and then control key. A GTC's
     /// picks are in m_config as well, which is what is drawn and sent.
     QHash<int, QHash<QString, QColor>> m_colours;
     bool m_coloursChanged = false;
 
-    /// A GTC's triggers, mappings and RPM lights are only in m_config. These
-    /// say they need saving.
+    /// The joystick button each input presses, from 1, by input.
+    using ButtonMappings = std::array<int, kWheelConfigMappingCount>;
+
+    /// Every known wheel's mappings, by wheel id. The block has a copy of
+    /// mappingsWheelId()'s.
+    QHash<int, ButtonMappings> m_mappings;
+
+    /// A GTC's triggers and RPM lights are only in m_config. These, and the
+    /// one for m_mappings, say they need saving.
     bool m_triggersChanged = false;
     bool m_mappingsChanged = false;
     bool m_rpmLightsChanged = false;
 
     int m_attachedWheelId = 0;
     bool m_attachedWheelKnown = false;
+
+    /// The wheel ids left to SIMAGIC's software. See managedElsewhere().
+    QSet<int> m_managedElsewhere;
 
     /// Runs for a second after each update. A change while it runs is left
     /// to flushPending(), which sends the reports it touched as they are by then,

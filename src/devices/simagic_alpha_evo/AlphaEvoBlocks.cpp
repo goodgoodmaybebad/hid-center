@@ -809,11 +809,107 @@ static_assert(capturedWheelConfig().rpmLedColour(0, 9) == 4
                   && capturedWheelConfig().rpmLedTrigger(8, 0) == 5,
               "the bar runs from green to red, not flashing, trigger 5 throughout");
 
+/// SIMAGIC SimPro Manager sending a GT Neo its block, after the RPM colour of
+/// LED 8 in pattern 2 was changed from purple to red. Typed out from the
+/// capture, as the GTC's above are.
+///
+/// Taken from `rpm-light-setting.pcapng`, frames 25244, 25258, 25266 and 25292.
+/// The same capture's first update, frames 6946 to 6984, sent when SimPro was
+/// opened, is identical but for that one byte, block offset 152, which was 0x75.
+/// That is what pins the GT Neo's RPM patterns to the GTC's layout.
+constexpr std::array<std::array<quint8, kWheelConfigReportSize>, kWheelConfigChunkCount>
+    kCaptureGtNeoWheelConfig{{
+        {0x91, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+         0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x40,
+         0x18, 0x19, 0x00, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x21, 0x23, 0x22, 0x24,
+         0x25, 0x26, 0x27, 0x51, 0x51, 0x55, 0x57, 0x5b, 0x5d, 0x5e, 0x5f, 0x60, 0x64,
+         0x53, 0x40, 0x10, 0x20, 0x70, 0x70, 0x60, 0x30, 0x60, 0x10},
+        {0x91, 0x01, 0x10, 0x42, 0x30, 0x51, 0xf3, 0x9a, 0xe9, 0xf8, 0x41, 0xf2, 0x06,
+         0xfa, 0x72, 0x56, 0x11, 0x24, 0x05, 0x1f, 0xa7, 0x49, 0x5d, 0x5d, 0x45, 0x45,
+         0x45, 0x45, 0x45, 0x45, 0x45, 0x45, 0x5d, 0x5d, 0x45, 0x45, 0x45, 0x45, 0x45,
+         0x45, 0x95, 0x95, 0x5d, 0x5d, 0x45, 0x45, 0x45, 0x45, 0x45, 0x95, 0x95, 0x95,
+         0x5d, 0x5d, 0x35, 0x35, 0x35, 0x35, 0x95, 0x95, 0x95, 0x95},
+        {0x91, 0x02, 0x5d, 0x5d, 0x35, 0x35, 0x35, 0x95, 0x95, 0x95, 0x95, 0x95, 0x5d,
+         0x5d, 0x35, 0x35, 0x95, 0x95, 0x95, 0x95, 0x95, 0x95, 0x5d, 0x5d, 0x15, 0x95,
+         0x95, 0x95, 0x95, 0x95, 0x95, 0x95, 0x5d, 0x5d, 0x15, 0x95, 0x95, 0x95, 0x95,
+         0x95, 0x95, 0x95, 0x5d, 0x5d, 0x15, 0x95, 0x95, 0x95, 0x95, 0x95, 0x95, 0x95,
+         0x58, 0x58, 0x30, 0x30, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90},
+        {0x91, 0x03, 0x58, 0x58, 0x30, 0x30, 0x30, 0x90, 0x90, 0x90, 0x90, 0x90, 0x58,
+         0x58, 0x30, 0x30, 0x30, 0x30, 0x90, 0x90, 0x90, 0x90, 0x58, 0x58, 0x40, 0x40,
+         0x40, 0x40, 0x40, 0x90, 0x90, 0x90, 0x58, 0x58, 0x40, 0x40, 0x40, 0x40, 0x40,
+         0x40, 0x90, 0x90, 0x58, 0x58, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40,
+         0x64, 0x01, 0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+    }};
+
+/// The GT Neo's block, with the report headers taken off.
+constexpr WheelConfig capturedGtNeoWheelConfig()
+{
+    WheelConfig config;
+    for (int chunk = 0; chunk < kWheelConfigChunkCount; ++chunk) {
+        for (int i = 0; i < kWheelConfigChunkSize; ++i) {
+            config.bytes[std::size_t(chunk * kWheelConfigChunkSize + i)] =
+                kCaptureGtNeoWheelConfig[std::size_t(chunk)][std::size_t(2 + i)];
+        }
+    }
+    return config;
+}
+
+/// Composing the GT Neo's block gives back the reports SimPro sent: the same
+/// headers and chunk order as a GTC's.
+constexpr bool matchesGtNeoWheelConfigCapture()
+{
+    const WheelConfig config = capturedGtNeoWheelConfig();
+    for (int chunk = 0; chunk < kWheelConfigChunkCount; ++chunk) {
+        if (composeWheelConfigChunk(config, chunk) != kCaptureGtNeoWheelConfig[std::size_t(chunk)])
+            return false;
+    }
+    return true;
+}
+
+static_assert(matchesGtNeoWheelConfigCapture(),
+              "the GT Neo's reports must match the capture");
+static_assert(capturedGtNeoWheelConfig().rpmLedColour(7, 2) == 1,
+              "the one byte changed in the capture is LED 8 of pattern 2, now red");
+static_assert(capturedGtNeoWheelConfig().ledBrightness() == 100
+                  && !capturedGtNeoWheelConfig().clutchSynced()
+                  && capturedGtNeoWheelConfig().clutchRatio() == 0,
+              "SimPro sent full brightness and independent clutch paddles");
+
+/// SimPro's GT Neo bar is lit from both ends inward, all fifteen LEDs at the
+/// top two patterns: the higher the threshold, the more LEDs lit.
+constexpr bool capturedGtNeoRpmLightsGrowWithRevs()
+{
+    const WheelConfig config = capturedGtNeoWheelConfig();
+    const auto lit = [&config](int pattern) {
+        int count = 0;
+        for (int led = 0; led < kWheelConfigRpmLedCount; ++led)
+            count += config.rpmLedColour(led, pattern) != kWheelLedColourOff ? 1 : 0;
+        return count;
+    };
+
+    for (int pattern = 0; pattern + 1 < kWheelConfigRpmPatternCount; ++pattern) {
+        if (config.rpmThreshold(pattern) < config.rpmThreshold(pattern + 1)
+            || lit(pattern) < lit(pattern + 1)) {
+            return false;
+        }
+    }
+    return lit(0) == kWheelConfigRpmLedCount && config.rpmThreshold(0) == 100
+           && config.rpmThreshold(9) == 81;
+}
+
+static_assert(capturedGtNeoRpmLightsGrowWithRevs(),
+              "the GT Neo's bar lights more LEDs from each higher threshold");
+
 } // namespace
 
 WheelConfig defaultWheelConfig()
 {
     return capturedWheelConfig();
+}
+
+WheelConfig gtNeoWheelConfig()
+{
+    return capturedGtNeoWheelConfig();
 }
 
 QByteArray composeWheelConfigReport(const WheelConfig &config, int chunk)

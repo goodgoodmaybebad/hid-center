@@ -16,7 +16,6 @@
 #include <span>
 
 #include "AlphaEvoWheelConfig.h"
-#include "core/DeveloperMode.h"
 #include "core/Logging.h"
 #include "svg/SvgGeometry.h"
 
@@ -662,9 +661,7 @@ const WheelLayout *wheelLayoutForId(int wheelId)
 
 bool wheelLayoutReleased(const WheelLayout &layout)
 {
-    // The GT Neo's page is not finished.
-    if (layout.model == WheelModel::GtNeo)
-        return developerMode();
+    Q_UNUSED(layout);
     return true;
 }
 

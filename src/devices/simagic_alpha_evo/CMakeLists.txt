@@ -25,6 +25,12 @@ hidcenter_add_device_plugin(
         ui/LedRing.h
         ui/WheelPage.cpp
         ui/WheelPage.h
+        ui/PedalsPage.cpp
+        ui/PedalsPage.h
+        ui/PedalCalibrationDialog.cpp
+        ui/PedalCalibrationDialog.h
+        ui/PedalCurveEditor.cpp
+        ui/PedalCurveEditor.h
         ui/WheelSchematic.cpp
         ui/WheelSchematic.h
         ui/WheelLayouts.cpp
@@ -58,6 +64,10 @@ hidcenter_add_device_plugin(
         AlphaEvoForceTrace.cpp
         AlphaEvoForceTrace.h
         AlphaEvoButtonInput.cpp
+        AlphaEvoPedals.cpp
+        AlphaEvoPedals.h
+        BasePedalController.cpp
+        BasePedalController.h
         AlphaEvoButtonInput.h
         ui/ClutchPaddlesView.cpp
         ui/ClutchPaddlesView.h

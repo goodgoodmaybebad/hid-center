@@ -225,7 +225,7 @@ const WheelLayout *wheelLayoutForId(int wheelId);
 
 /// Whether the Wheel tab offers a wheel to the user. A wheel still in
 /// development is offered in developer mode only; outside it, the tab treats that
-/// wheel like one it has no layout for.
+/// wheel like one it has no layout for. Every wheel is released for now.
 bool wheelLayoutReleased(const WheelLayout &layout);
 
 /// A control's name, in the user's language.

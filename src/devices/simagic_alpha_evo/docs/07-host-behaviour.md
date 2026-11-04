@@ -12,9 +12,11 @@ to *do*, and when, from the way the reference implementation does it.
 2. **Open the LED interface** by its endpoint (`0x02` OUT). Failure here is not
    fatal: the base configures without it and only the ring is lost.
 3. **Start polling** (below).
-4. **Restore wheel state:** send the saved wheel LED brightness and clutch
-   paddle settings (report `0x91`, sub-command 3). If the attached wheel (from `0x23` byte 10) is a GTC, send the
-   full wheel-configuration block (`0`, `1`, `2`, then `3`).
+4. **Restore wheel state:** if the attached wheel (from `0x23` byte 10) is a GTC
+   or a GT Neo, send the full wheel-configuration block (`0`, `1`, `2`, then `3`)
+   with that wheel's button mappings and the saved LED brightness and clutch
+   paddle settings. Send nothing to any other wheel: sub-command 3 alone wiped a
+   GT Neo's mappings (see [05](05-wheel-config.md#sending-rules)).
 5. **Start the telemetry and ring clocks.** The ring is driven from the same clock
    as telemetry so the shift lights and the ring describe the same instant.
 

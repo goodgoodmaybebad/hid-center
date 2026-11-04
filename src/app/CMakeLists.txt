@@ -13,6 +13,8 @@ qt_add_executable(hid-center
     DeviceView.h
     HomePage.cpp
     HomePage.h
+    InterfaceScale.cpp
+    InterfaceScale.h
     AnalyzerTab.cpp
     AnalyzerTab.h
     LogPanel.cpp
@@ -40,7 +42,7 @@ qt_add_executable(hid-center
 )
 
 qt_add_resources(hid-center hid-center-resources
-    PREFIX "/"
+    PREFIX "/icons"
     BASE "${PROJECT_SOURCE_DIR}/resources"
     FILES "${PROJECT_SOURCE_DIR}/resources/hid-center.svg")
 

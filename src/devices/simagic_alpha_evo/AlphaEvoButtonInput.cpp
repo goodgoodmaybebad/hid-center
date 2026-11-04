@@ -128,17 +128,24 @@ AlphaEvoButtonInput::AlphaEvoButtonInput(IUsbDevice *device, QObject *parent)
         m_bits = buttonBitsOf(iface->hid.descriptor, kButtonReportId);
         for (const ButtonBit &bit : std::as_const(m_bits))
             m_buttonCount = qMax(m_buttonCount, bit.button);
-        findClutchAxes(iface->hid.descriptor);
+        findAxes(iface->hid.descriptor);
     }
 }
 
-void AlphaEvoButtonInput::findClutchAxes(const ReportDescriptor &descriptor)
+void AlphaEvoButtonInput::findAxes(const ReportDescriptor &descriptor)
 {
     const AxisField left = axisFieldOf(descriptor, kButtonReportId, kLeftClutchUsage);
     const AxisField right = axisFieldOf(descriptor, kButtonReportId, kRightClutchUsage);
     if (left.isValid() && right.isValid()) {
         m_leftClutch = left;
         m_rightClutch = right;
+    }
+
+    const AxisField throttle = axisFieldOf(descriptor, kButtonReportId, kThrottlePedalUsage);
+    const AxisField brake = axisFieldOf(descriptor, kButtonReportId, kBrakePedalUsage);
+    if (throttle.isValid() && brake.isValid()) {
+        m_throttle = throttle;
+        m_brake = brake;
     }
 }
 
@@ -192,7 +199,7 @@ bool AlphaEvoButtonInput::attach()
     const QList<ButtonBit> bits = buttonBitsOf(device->descriptor(), kButtonReportId);
     if (!bits.isEmpty())
         m_bits = bits;
-    findClutchAxes(device->descriptor());
+    findAxes(device->descriptor());
 
     m_reportConnection = connect(device, &IUsbDeviceHidInterface::inputReport, this,
                                  &AlphaEvoButtonInput::onInputReport);
@@ -221,6 +228,7 @@ void AlphaEvoButtonInput::detach()
     // reading stopped.
     setPressed({});
     setClutch(m_leftClutch.logicalMin, m_rightClutch.logicalMin);
+    setPedals(m_throttle.logicalMin, m_brake.logicalMin);
 }
 
 void AlphaEvoButtonInput::onDeviceLost()
@@ -236,9 +244,23 @@ void AlphaEvoButtonInput::onInputReport(const QByteArray &report)
 {
     if (report.isEmpty() || quint8(report.at(0)) != kButtonReportId)
         return;
+    if (m_forwardsReports)
+        Q_EMIT inputReportReceived(report);
     setPressed(pressedButtons(report, m_bits));
     if (hasClutchAxes())
         setClutch(axisValue(report, m_leftClutch), axisValue(report, m_rightClutch));
+    if (hasPedalAxes())
+        setPedals(axisValue(report, m_throttle), axisValue(report, m_brake));
+}
+
+void AlphaEvoButtonInput::setPedals(qint32 throttle, qint32 brake)
+{
+    if (throttle == m_throttleValue && brake == m_brakeValue)
+        return;
+
+    m_throttleValue = throttle;
+    m_brakeValue = brake;
+    Q_EMIT pedalsChanged();
 }
 
 void AlphaEvoButtonInput::setClutch(qint32 left, qint32 right)
@@ -270,6 +292,16 @@ qreal AlphaEvoButtonInput::leftClutch() const
 qreal AlphaEvoButtonInput::rightClutch() const
 {
     return normalised(m_rightClutch, m_rightClutchValue);
+}
+
+qreal AlphaEvoButtonInput::throttle() const
+{
+    return normalised(m_throttle, m_throttleValue);
+}
+
+qreal AlphaEvoButtonInput::brake() const
+{
+    return normalised(m_brake, m_brakeValue);
 }
 
 void AlphaEvoButtonInput::setPressed(const QList<int> &pressed)

@@ -90,6 +90,12 @@ QVector<QByteArray> composeLedRingReports(const LedRingColours &colours, quint8 
 /// another. See kDefaultWheelConfigWheelId.
 WheelConfig defaultWheelConfig();
 
+/// The block SIMAGIC SimPro Manager sent a GT Neo, as captured: its own LED
+/// slots, RPM thresholds and patterns, where the GTC's would light a GT Neo's
+/// fifteen RPM LEDs wrongly. What is sent to a GT Neo but its button mappings,
+/// brightness and clutch bytes, which are the user's.
+WheelConfig gtNeoWheelConfig();
+
 /// The wheel defaultWheelConfig() was captured from, by its wheel id: 4, the GTC, which is also what the base reported when this
 /// module ran against it. The parts of the block that depend on the model, such
 /// as the LED colours, are only sent while the base reports this wheel.
@@ -108,6 +114,38 @@ constexpr bool isGtcButtonInput(int input)
 {
     return WheelConfig::isMappingInput(input) && input != 18 && input != 20 && input != 23
            && input != 26;
+}
+
+/// The GT Neo, by the wheel id its base reports: seen on hardware.
+inline constexpr int kGtNeoWheelId = 6;
+
+/// Whether a GT Neo presses a joystick button through mapping byte `input`.
+///
+/// Every one of the forty but 23 and 26, found on a real wheel by mapping every
+/// input to a button of its own and trying each control. The shift paddles are
+/// inputs 13 (left) and 12 (right), and the clutch paddles are axes.
+constexpr bool isGtNeoButtonInput(int input)
+{
+    return WheelConfig::isMappingInput(input) && input != 23 && input != 26;
+}
+
+/// Whether this module knows how wheel `wheelId` lays out the button mappings,
+/// and so sends that wheel the block. The GTC's are the captured block's; a GT
+/// Neo's were found to be in the same forty bytes.
+constexpr bool wheelMappingsKnown(int wheelId)
+{
+    return wheelId == kDefaultWheelConfigWheelId || wheelId == kGtNeoWheelId;
+}
+
+/// Whether wheel `wheelId` presses a joystick button through mapping byte
+/// `input`. False for every input of a wheel whose mappings are not known.
+constexpr bool wheelUsesInput(int wheelId, int input)
+{
+    if (wheelId == kDefaultWheelConfigWheelId)
+        return isGtcButtonInput(input);
+    if (wheelId == kGtNeoWheelId)
+        return isGtNeoButtonInput(input);
+    return false;
 }
 
 /// Compose one report of the wheel configuration: `chunk` 0 to 3, 62 bytes.

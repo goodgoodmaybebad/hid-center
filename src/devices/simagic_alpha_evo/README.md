@@ -6,7 +6,7 @@ steering wheel attached to it from Linux.
 
 ## What it does
 
-The plugin adds five tabs to the device page.
+The plugin adds six tabs to the device page.
 
 - **Status**: shows what the base is doing: firmware version, state, motor and
   MOSFET temperatures, bus voltage, and which steering wheel is attached. It also
@@ -25,14 +25,24 @@ The plugin adds five tabs to the device page.
 - **Wheelbase LED**: sets the colours of the LED ring on the base. There are
   separate modes for idle, ABS, traction control and other events, and they
   switch automatically from telemetry.
-- **Wheel**: configures the attached steering wheel, currently the GTC:
+- **Wheel**: configures the attached steering wheel. On a GT Neo, which
+  joystick button each input presses, the RPM shift lights, the LED brightness
+  and the clutch paddles. On a GTC:
   - which joystick button each input presses
   - the colour and trigger of each lit button
   - the RPM shift-light patterns and thresholds
   - LED brightness
   - whether the clutch paddles are synced, and their ratio
 
-  It also shows pressed buttons and the clutch paddles live.
+  It also shows pressed buttons and the clutch paddles live. **Let SimPro manage
+  this wheel** stops the app sending anything to the wheel on the base, so what
+  SIMAGIC's own software set on it, LEDs included, stays.
+- **Pedals**: shows pedals plugged into the base by CAN-Bus, such as a P1000 in
+  its blue-light mode, as live throttle and brake bars, and sets the brake's
+  sensor (load cell or angle), the brake's and the throttle's curve (SimPro's
+  four, or three points of its own) and range, and calibrates them. Off until
+  turned on, since every change restates settings and a calibration that cannot
+  be read back.
 
 Settings are saved and re-applied to the wheel at start-up. Each page has a dry-run
 option that logs the exact bytes instead of sending them. An offline preview lets
@@ -47,7 +57,10 @@ you explore the pages with no hardware connected.
 
 ## Limitations
 
-- Only the GTC wheel's own configuration is written.
+- Only the GTC and GT Neo are written to, and nothing at all is sent to any other
+  wheel. A GT Neo starts from the block SimPro was once captured sending it. Its
+  shift lights can be changed here, its button LEDs cannot; leave the wheel to
+  SimPro to keep what SimPro set.
 - The wheel's configuration and the LED ring cannot be read back from the hardware.
   The plugin remembers what it sent and re-sends the ring colours every few seconds.
 - Parts of the protocol are inferred from captures. The

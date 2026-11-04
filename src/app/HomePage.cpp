@@ -3,6 +3,7 @@
 
 #include "app/HomePage.h"
 
+#include "app/InterfaceScale.h"
 #include "app/LogPanel.h"
 #include "app/LogWindow.h"
 #include "core/DeveloperMode.h"
@@ -11,8 +12,13 @@
 
 #include <QApplication>
 #include <QCheckBox>
+#include <QComboBox>
+#include <QCoreApplication>
 #include <QGroupBox>
+#include <QHBoxLayout>
 #include <QLabel>
+#include <QProcess>
+#include <QPushButton>
 #include <QScrollArea>
 #include <QSplitter>
 #include <QVBoxLayout>
@@ -52,6 +58,8 @@ HomePage::HomePage(PluginManager *plugins, IUsbBackend *backend, QWidget *parent
     debugBox->setVisible(developerMode());
     topLayout->addWidget(debugBox);
 
+    topLayout->addWidget(makeAppearanceBox(top));
+
     m_status = new QLabel(top);
     m_status->setWordWrap(true);
     m_status->setTextInteractionFlags(Qt::TextBrowserInteraction);
@@ -82,6 +90,57 @@ HomePage::HomePage(PluginManager *plugins, IUsbBackend *backend, QWidget *parent
     splitter->setStretchFactor(1, 2);
 
     setDeviceCount(0);
+}
+
+QGroupBox *HomePage::makeAppearanceBox(QWidget *parent)
+{
+    auto *box = new QGroupBox(tr("Appearance"), parent);
+    auto *layout = new QVBoxLayout(box);
+
+    auto *row = new QHBoxLayout;
+    auto *label = new QLabel(tr("&Interface size"), box);
+    row->addWidget(label);
+    auto *scale = new QComboBox(box);
+    scale->setObjectName(QStringLiteral("interfaceScale"));
+    for (const int percent : interfaceScales()) {
+        scale->addItem(percent == 0 ? tr("Automatic, as the desktop asks")
+                                    : tr("%1 %").arg(percent),
+                       percent);
+    }
+    scale->setCurrentIndex(qMax(0, scale->findData(savedInterfaceScale())));
+    label->setBuddy(scale);
+    row->addWidget(scale);
+
+    auto *restart = new QPushButton(tr("&Restart now"), box);
+    restart->setObjectName(QStringLiteral("restartForScale"));
+    restart->setVisible(false);
+    row->addWidget(restart);
+    row->addStretch(1);
+    layout->addLayout(row);
+
+    auto *note = new QLabel(box);
+    note->setWordWrap(true);
+    note->setEnabled(false);
+    note->setText(interfaceScaleOverridden()
+                      ? tr("QT_SCALE_FACTOR is set, so it decides the size, not this.")
+                      : tr("Takes effect when HID Center starts again."));
+    layout->addWidget(note);
+
+    const int applied = savedInterfaceScale();
+    connect(scale, &QComboBox::currentIndexChanged, this, [scale, restart, applied](int index) {
+        const int percent = scale->itemData(index).toInt();
+        saveInterfaceScale(percent);
+        restart->setVisible(percent != applied && !interfaceScaleOverridden());
+    });
+    connect(restart, &QPushButton::clicked, this, [] {
+        // The same program and arguments, then this one goes, closing its
+        // devices as it would on any quit.
+        if (QProcess::startDetached(QCoreApplication::applicationFilePath(),
+                                    QCoreApplication::arguments().mid(1))) {
+            QCoreApplication::quit();
+        }
+    });
+    return box;
 }
 
 void HomePage::popOutLog()

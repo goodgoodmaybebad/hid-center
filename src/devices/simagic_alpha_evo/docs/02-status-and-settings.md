@@ -71,7 +71,7 @@ as "not available" — this is **not** an error for the host as a whole (see
 | 6 | 2 | `feedbackTorque` | i16 | Signed |
 | 8 | 1 | `input` | u8 | |
 | 9 | 1 | `output` | u8 | |
-| 10 | 1 | `wheelId` | u8 | Which steering wheel is attached. `4` = GTC; `0` when none is known |
+| 10 | 1 | `wheelId` | u8 | Which steering wheel is attached. `4` = GTC, `6` = GT Neo; `0` when none is known |
 | 11 | 1 | `canId` | u8 | |
 | 12 | 1 | `canFdId` | u8 | |
 | 13 | 2 | `busVoltage` | u16 | Unsigned |
@@ -80,8 +80,9 @@ as "not available" — this is **not** an error for the host as a whole (see
 | 17 | 1 | unknown17 | u8 | |
 
 `wheelId` is the one field the wheel-configuration protocol depends on: the app
-only sends the [wheel configuration](05-wheel-config.md) when it reads `4` (GTC),
-because the block's mappings and LED slots mean something else on other wheels.
+only sends the [wheel configuration](05-wheel-config.md) when it reads `4` (GTC)
+or `6` (GT Neo), because the block's mappings and LED slots mean something else
+on other wheels.
 
 ## SET `0x80` — settings blocks
 

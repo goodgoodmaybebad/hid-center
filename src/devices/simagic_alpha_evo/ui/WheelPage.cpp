@@ -16,6 +16,7 @@
 #include "WheelSchematic.h"
 #include "core/DeveloperMode.h"
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -137,7 +138,33 @@ WheelPage::WheelPage(WheelConfigController *wheel, AlphaEvoButtonInput *buttons,
     sideScroll->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Expanding);
     body->addWidget(sideScroll);
 
+    // --- Left to SIMAGIC's software -------------------------------------------
+    // Only for the wheel on the base; see showManagedElsewhere().
+    m_managedBox = new QGroupBox(tr("SimPro"), this);
+    m_managedBox->setObjectName(QStringLiteral("managedElsewhere"));
+    auto *managedLayout = new QVBoxLayout(m_managedBox);
+    m_managed = new QCheckBox(tr("&Let SimPro manage this wheel"), m_managedBox);
+    m_managed->setObjectName(QStringLiteral("managedElsewhereCheck"));
+    managedLayout->addWidget(m_managed);
+    auto *managedNote = new QLabel(
+        tr("Nothing is sent to the wheel, so what SIMAGIC SimPro Manager set on it, its LEDs "
+           "and shift lights included, stays. The settings below cannot be changed meanwhile.\n"
+           "Turning this off sends the wheel this page's settings, replacing SimPro's."),
+        m_managedBox);
+    managedNote->setWordWrap(true);
+    managedNote->setEnabled(false);
+    managedLayout->addWidget(managedNote);
+    column->addWidget(m_managedBox);
+
+    connect(m_managed, &QCheckBox::toggled, this, [this](bool managed) {
+        const WheelLayout *shown = m_schematic->wheel();
+        if (m_wheel && shown)
+            m_wheel->setManagedElsewhere(shown->wheelId, managed);
+        showChosenWheel();
+    });
+
     auto *leds = new QGroupBox(tr("LEDs"), this);
+    m_leds = leds;
     auto *ledsLayout = new QVBoxLayout(leds);
     ledsLayout->addWidget(new QLabel(tr("Brightness"), leds));
 
@@ -389,9 +416,11 @@ void WheelPage::showClutch()
         m_clutchView->setValues(left, right);
     }
 
-    // A ratio does nothing to paddles that are not synced.
-    m_clutchView->setRatioEditable(synced);
-    m_clutchRatio->setEnabled(synced);
+    // A ratio does nothing to paddles that are not synced, and nothing is
+    // changed on a wheel left to SimPro.
+    m_clutchView->setRatioEditable(synced && !m_wheelManaged);
+    m_clutchRatio->setEnabled(synced && !m_wheelManaged);
+    m_clutchSync->setEnabled(!m_wheelManaged);
 }
 
 void WheelPage::showChosenWheel()
@@ -432,6 +461,7 @@ void WheelPage::showChosenWheel()
     const WheelModel chosen = shownLayout->model;
     const WheelLayout &layout = *shownLayout;
     m_schematic->setWheel(&layout);
+    showManagedElsewhere();
     m_clutch->setVisible(std::any_of(layout.controls.cbegin(), layout.controls.cend(),
                                      [](const WheelControl &control) {
                                          return control.kind == WheelControlKind::ClutchPaddle;
@@ -470,7 +500,8 @@ void WheelPage::showChosenWheel()
             break;
         }
     }
-    m_schematic->setEditableControls(editable);
+    // Nothing to click on a wheel left to SimPro: it would change nothing.
+    m_schematic->setEditableControls(m_wheelManaged ? QSet<QString>() : editable);
 
     refreshWarnings();
     refreshStatus();
@@ -479,7 +510,7 @@ void WheelPage::showChosenWheel()
 void WheelPage::editControl(int index)
 {
     const WheelLayout *wheel = m_schematic->wheel();
-    if (!wheel || index < 0 || index >= wheel->controls.size())
+    if (!wheel || index < 0 || index >= wheel->controls.size() || m_wheelManaged)
         return;
 
     const WheelControl &control = wheel->controls.at(index);
@@ -683,6 +714,22 @@ QString WheelPage::sharedButtonWarning(WheelModel model, const QString &key, int
     return tr("Button %1 is already mapped by %2.")
         .arg(button)
         .arg(QLocale().createSeparatedList(who));
+}
+
+void WheelPage::showManagedElsewhere()
+{
+    const WheelLayout *shown = m_schematic->wheel();
+    const bool offered = m_wheel && shown && shown->wheelId == m_wheel->attachedWheelId()
+                         && wheelMappingsKnown(shown->wheelId);
+    m_wheelManaged = offered && m_wheel->managedElsewhere(shown->wheelId);
+
+    m_managedBox->setVisible(offered);
+    {
+        const QSignalBlocker blocker(m_managed);
+        m_managed->setChecked(m_wheelManaged);
+    }
+    m_leds->setEnabled(!m_wheelManaged);
+    showClutch();
 }
 
 void WheelPage::refreshWarnings()

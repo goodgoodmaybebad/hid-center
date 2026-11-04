@@ -299,6 +299,7 @@ void AlphaEvoSettings::startIoThread()
     connect(m_io, &AlphaEvoIo::applyFinished, this, &AlphaEvoSettings::onApplyFinished);
     connect(m_io, &AlphaEvoIo::ledColoursSent, this, &AlphaEvoSettings::ledColoursSent);
     connect(m_io, &AlphaEvoIo::wheelConfigSent, this, &AlphaEvoSettings::wheelConfigSent);
+    connect(m_io, &AlphaEvoIo::pedalReportSent, this, &AlphaEvoSettings::pedalReportSent);
 
     // Worker to worker, both queued because the two live on different threads.
     // The acknowledgement going back is what holds the animator to one frame in
@@ -571,6 +572,27 @@ void AlphaEvoSettings::writeWheelConfigAsync(const WheelConfig &config, int chun
     QMetaObject::invokeMethod(m_io, "sendWheelConfigReport", Qt::QueuedConnection,
                               Q_ARG(hidcenter::simagic_alpha_evo::WheelConfig, config),
                               Q_ARG(int, chunk));
+}
+
+void AlphaEvoSettings::writePedalReportAsync(const QByteArray &report)
+{
+    if (m_offline) {
+        qCInfo(hidcenterDevice).noquote()
+            << QStringLiteral("Offline, would have written pedal report: %1")
+                   .arg(QString::fromLatin1(report.toHex(' ')));
+        return;
+    }
+
+    if (!m_io) {
+        // Unlike the wheel's, never held: a pedal update is only ever the user
+        // changing something, and one that waited for a base that may never
+        // answer would land long after anyone expected it.
+        Q_EMIT pedalReportSent(false, tr("The wheelbase did not answer."), m_dryRun);
+        return;
+    }
+
+    QMetaObject::invokeMethod(m_io, "sendPedalReport", Qt::QueuedConnection,
+                              Q_ARG(QByteArray, report));
 }
 
 void AlphaEvoSettings::setLedModesAsync(const LedModeSet &modes)

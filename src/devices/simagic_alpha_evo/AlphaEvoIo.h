@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <QByteArray>
 #include <QElapsedTimer>
 #include <QObject>
 #include <QString>
@@ -132,6 +133,12 @@ public Q_SLOTS:
     /// Honours the dry run. Answers through wheelConfigSent(), on the edge only.
     void sendWheelConfigReport(const hidcenter::simagic_alpha_evo::WheelConfig &config, int chunk);
 
+    /// Send one report of the pass-through to pedals on the base, as
+    /// composePedalUpdate() made it. Honours the dry run, and logs every one:
+    /// they are few, and only ever sent because the user changed something.
+    /// Answers through pedalReportSent().
+    void sendPedalReport(const QByteArray &report);
+
 Q_SIGNALS:
     /// A status was read. Emitted for every successful read, including the ones
     /// that changed nothing; deciding what is new is the façade's job.
@@ -170,6 +177,9 @@ Q_SIGNALS:
     /// The edge, not every write, for the reason ledColoursSent() gives: a
     /// dragged slider sends several a second.
     void wheelConfigSent(bool ok, const QString &error, bool dryRun);
+
+    /// One pedal report was sent, or failed to be.
+    void pedalReportSent(bool ok, const QString &error, bool dryRun);
 
 private Q_SLOTS:
     void poll();
